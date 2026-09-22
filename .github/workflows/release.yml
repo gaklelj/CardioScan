@@ -60,16 +60,29 @@ jobs:
             ## CardioScan ${{ github.ref_name }}
 
             ### Скачать:
-            | Платформа | Файл |
-            |---|---|
-            | macOS (Apple Silicon) | `CardioScan_*_aarch64.dmg` |
-            | macOS (Intel) | `CardioScan_*_x64.dmg` |
-            | Windows | `CardioScan_*_x64-setup.exe` |
-            | Linux | `CardioScan_*_amd64.AppImage` |
+            | Платформа | Файл | Устройства |
+            |---|---|---|
+            | 🍎 macOS Apple Silicon | `CardioScan_*_aarch64.dmg` | MacBook M1/M2/M3/M4 |
+            | 🍎 macOS Intel | `CardioScan_*_x64.dmg` | MacBook до 2020 |
+            | 🪟 Windows | `CardioScan_*_x64-setup.exe` | Windows 10/11 x64 |
+            | 🐧 Linux | `CardioScan_*_amd64.AppImage` | Ubuntu, Debian и др. |
+            | 📱 iOS | `CardioScan-iOS.ipa` | iPhone / iPad |
+            | 🤖 Android | `CardioScan-Android-arm64.apk` | Samsung, Xiaomi, Pixel и др. |
 
-            **macOS:** открой `.dmg`, перетащи в Applications. При первом запуске: `Control+клик → Открыть`
-            **Windows:** запусти `.exe` установщик
-            **Linux:** сделай файл исполняемым: `chmod +x *.AppImage && ./*.AppImage`
+            ---
+
+            ### Установка
+            **macOS** — открой DMG, перетащи в Applications. Первый запуск: правый клик → Открыть → Открыть
+            **Windows** — запусти `.exe` установщик
+            **Linux** — `chmod +x *.AppImage && ./*.AppImage`
+            **iOS** — через AltStore, Sideloadly или Apple Configurator 2
+            **Android** — включи «Установку из неизвестных источников» и открой APK
+
+            ---
+
+            ### Возможности
+            - **ЭКГ в реальном времени** — canvas, Keras AI (6 классов), автоанализ каждые 1000 точек
+            - **Анализ фото ЭКГ** — Roboflow CV, зум-модалка, мини-отчёт (на всех платформах)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
