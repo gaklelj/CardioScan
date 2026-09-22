@@ -6,9 +6,12 @@ import base64
 import logging
 import numpy as np
 import requests
+from gevent.threadpool import ThreadPool
 from flask import Flask, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
+
+_pool = ThreadPool(2)
 
 load_dotenv()
 
@@ -19,7 +22,7 @@ logging.basicConfig(
     datefmt='%H:%M:%S',
 )
 log = logging.getLogger('cardioscan')
-logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('werkzeug').setLevel(logging.INFO)
 logging.getLogger('engineio').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 
@@ -39,6 +42,10 @@ log.info('Model warmed up')
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'fallback-dev-key')
+
+@app.before_request
+def log_request():
+    log.info('→ %s %s', request.method, request.path)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY', '')
@@ -112,7 +119,7 @@ def ecg_analyze():
         body = request.get_json(silent=True) or {}
 
         if 'points' in body:
-            result = run_model(body['points'])
+            result = _pool.apply(run_model, (body['points'],))
             log.info('Local model result: %s (%.2f)', result['class'], result['confidence'])
             return jsonify(result)
 
@@ -153,7 +160,7 @@ def handle_ecg_data(data):
 
     if len(ecg_buffer) >= BUFFER_SIZE:
         try:
-            result = run_model(ecg_buffer[-BUFFER_SIZE:])
+            result = _pool.apply(run_model, (ecg_buffer[-BUFFER_SIZE:],))
             emit('ecg_analysis', result, broadcast=True)
             log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
@@ -172,7 +179,7 @@ def handle_ecg_batch(data):
 
     if points:
         try:
-            result = run_model(points)
+            result = _pool.apply(run_model, (points,))
             emit('ecg_analysis', result, broadcast=True)
             log.info('Batch analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
