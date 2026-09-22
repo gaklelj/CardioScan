@@ -169,4 +169,4 @@ def index(path):
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     log.info('CardioScan backend starting on http://0.0.0.0:6767')
-    socketio.run(app, host='0.0.0.0', port=6767)
+    socketio.run(app, host='0.0.0.0', port=6767, allow_unsafe_werkzeug=True)
