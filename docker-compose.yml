@@ -1,0 +1,10 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6767:6767"
+    env_file:
+      - backend/.env
+    restart: unless-stopped
