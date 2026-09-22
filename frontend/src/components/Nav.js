@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { Activity, ArrowLeft, Sun, Moon, ArrowRight } from 'lucide-react'
+import { Activity, ArrowLeft, Sun, Moon, ArrowRight, Usb } from 'lucide-react'
 import { useTheme } from '../ThemeContext'
 import { useLanguage } from '../LanguageContext'
+
+const isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__)
 
 const LANGS = [
   { code: 'en', label: 'EN' },
@@ -68,6 +70,18 @@ export default function Nav({ page = 'root', title }) {
             >
               {t('guide')}
             </button>
+            {isTauri && (
+              <button
+                onClick={() => navigate('/serial')}
+                className="flex items-center gap-1.5 text-sm transition-colors cursor-pointer border rounded-lg px-3 py-2 hidden sm:flex"
+                style={{ borderColor: 'var(--c-border)', color: 'var(--c-muted)' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--c-text)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--c-muted)'}
+              >
+                <Usb size={13} />
+                <span>Serial</span>
+              </button>
+            )}
             <button
               onClick={() => navigate('/analyze')}
               className="flex items-center gap-1.5 text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition-colors cursor-pointer"
