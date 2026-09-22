@@ -1,25 +1,64 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { ThemeProvider } from './ThemeContext'
 import { LanguageProvider } from './LanguageContext'
+import { usePlatform } from './hooks/usePlatform'
 import Landing from './pages/Landing'
+import IOSHome from './pages/IOSHome'
 import Analyzer from './pages/Analyzer'
 import Guide from './pages/Guide'
 import SerialMonitor from './pages/SerialMonitor'
+import IOSTabBar from './components/IOSTabBar'
 import './index.css'
+
+function IOSAnalyzerWrapper() {
+  return <Analyzer ios />
+}
+function IOSGuideWrapper() {
+  return <Guide ios />
+}
+
+function AppRoutes() {
+  const { isIOS } = usePlatform()
+  const location = useLocation()
+
+  // iOS: show tab bar only on main tabs
+  const tabRoutes = ['/', '/analyze', '/guide']
+  const showTabBar = isIOS && tabRoutes.includes(location.pathname)
+
+  if (isIOS) {
+    return (
+      <div className="ios-root">
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Routes>
+            <Route path="/"        element={<IOSHome />} />
+            <Route path="/analyze" element={<IOSAnalyzerWrapper />} />
+            <Route path="/guide"   element={<IOSGuideWrapper />} />
+            <Route path="/serial"  element={<SerialMonitor />} />
+          </Routes>
+        </div>
+        {showTabBar && <IOSTabBar />}
+      </div>
+    )
+  }
+
+  return (
+    <Routes>
+      <Route path="/"        element={<Landing />} />
+      <Route path="/analyze" element={<Analyzer />} />
+      <Route path="/guide"   element={<Guide />} />
+      <Route path="/serial"  element={<SerialMonitor />} />
+    </Routes>
+  )
+}
 
 export default function App() {
   return (
     <LanguageProvider>
-    <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/analyze" element={<Analyzer />} />
-          <Route path="/guide" element={<Guide />} />
-          <Route path="/serial" element={<SerialMonitor />} />
-        </Routes>
-      </BrowserRouter>
-    </ThemeProvider>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </ThemeProvider>
     </LanguageProvider>
   )
 }

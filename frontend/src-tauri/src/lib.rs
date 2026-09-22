@@ -1,17 +1,20 @@
-use serialport::SerialPortInfo;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::sync::Mutex;
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 struct SerialState(Mutex<Option<Box<dyn serialport::SerialPort>>>);
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn list_serial_ports() -> Vec<String> {
     serialport::available_ports()
         .unwrap_or_default()
         .into_iter()
-        .map(|p: SerialPortInfo| p.port_name)
+        .map(|p: serialport::SerialPortInfo| p.port_name)
         .collect()
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn connect_serial(
     state: tauri::State<SerialState>,
@@ -27,12 +30,14 @@ fn connect_serial(
     Ok(())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn disconnect_serial(state: tauri::State<SerialState>) {
     let mut guard = state.0.lock().unwrap();
     *guard = None;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 fn read_serial_data(state: tauri::State<SerialState>) -> Result<String, String> {
     let mut guard = state.0.lock().unwrap();
@@ -53,8 +58,7 @@ fn read_serial_data(state: tauri::State<SerialState>) -> Result<String, String> 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .manage(SerialState(Mutex::new(None)))
+    let builder = tauri::Builder::default()
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -64,13 +68,22 @@ pub fn run() {
                 )?;
             }
             Ok(())
-        })
+        });
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder
+        .manage(SerialState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
             connect_serial,
             disconnect_serial,
             read_serial_data,
-        ])
+        ]);
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![]);
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

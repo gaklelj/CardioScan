@@ -116,6 +116,11 @@ const translations = {
     faq4q: 'Can I use a phone camera?',
     faq4a: 'Yes. Photograph the printed strip flat on a plain surface in good lighting, avoiding glare and shadows.',
 
+    /* iOS Tabs */
+    tabHome: 'Home',
+    tabAnalyze: 'Analyze',
+    tabGuide: 'Guide',
+
     /* Serial Monitor */
     serialTitle: 'Serial Monitor',
     serialPort: 'Port',
@@ -273,6 +278,11 @@ const translations = {
     faq4q: 'Можно ли использовать камеру телефона?',
     faq4a: 'Да. Фотографируйте ленту на ровной поверхности при хорошем освещении, избегая бликов и теней.',
 
+    /* iOS Tabs */
+    tabHome: 'Главная',
+    tabAnalyze: 'Анализ',
+    tabGuide: 'Гайд',
+
     /* Serial Monitor */
     serialTitle: 'Serial Monitor',
     serialPort: 'Порт',
@@ -427,6 +437,11 @@ const translations = {
     faq3a: 'Дәлдік сурет сапасы мен Roboflow модел нұсқасына байланысты. Нәтижелерде сенімділік баллары бар — төмен сенімділікпен анықталғандарды абайлап қараңыз.',
     faq4q: 'Телефон камерасын пайдалана аламын ба?',
     faq4a: 'Иә. Басып шығарылған ленталарды жарық жерде жайпақ бетте бликтер мен көлеңкелерден аулақ жатқызып түсіріңіз.',
+
+    /* iOS Tabs */
+    tabHome: 'Басты',
+    tabAnalyze: 'Талдау',
+    tabGuide: 'Нұсқаулық',
 
     /* Serial Monitor */
     serialTitle: 'Serial Monitor',

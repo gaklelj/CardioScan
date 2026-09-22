@@ -5,6 +5,7 @@ import ImageUpload from '../components/ImageUpload'
 import LiveCapture from '../components/LiveCapture'
 import EcgRealtime from '../components/EcgRealtime'
 import { useLanguage } from '../LanguageContext'
+import { usePlatform } from '../hooks/usePlatform'
 
 const API_KEY = 'WapH9HvnhmB00awLAv3N'
 const MODEL   = 'ecg.analyze'
@@ -30,12 +31,50 @@ function EcgStrip() {
 export default function Analyzer() {
   const [tab, setTab] = useState('realtime')
   const { t } = useLanguage()
+  const { isIOS } = usePlatform()
 
   const tabs = [
     { v: 'realtime', label: t('tabRealtime'), Icon: Activity },
     { v: 'upload',   label: t('tabUpload'),   Icon: Upload },
     { v: 'live',     label: t('tabLive'),     Icon: Monitor },
   ]
+
+  if (isIOS) {
+    return (
+      <div className="ios-page">
+        <div className="ios-large-title-header" style={{ borderBottom: '0.5px solid var(--ios-separator)' }}>
+          <h1 className="ios-large-title">{t('analyzerTitle')}</h1>
+          <p className="ios-subtitle">{t('analyzerSubtitle')}</p>
+        </div>
+        <div className="ios-scroll-content">
+          {/* Tab switcher */}
+          <div style={{
+            display: 'flex', background: 'var(--ios-fill-secondary)',
+            borderRadius: 10, padding: 2, gap: 2, margin: '8px 0',
+          }}>
+            {tabs.map(({ v, label, Icon }) => (
+              <button key={v} onClick={() => setTab(v)} style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 5, padding: '8px 4px', borderRadius: 8, border: 'none',
+                fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                background: tab === v ? 'var(--ios-bg-secondary)' : 'transparent',
+                color: tab === v ? 'var(--ios-text-primary)' : 'var(--ios-text-secondary)',
+                WebkitTapHighlightColor: 'transparent',
+                transition: 'background 0.15s',
+              }}>
+                <Icon size={13} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+              </button>
+            ))}
+          </div>
+          <div key={tab}>
+            {tab === 'realtime' ? <EcgRealtime />
+              : tab === 'upload' ? <ImageUpload apiKey={API_KEY} model={MODEL} version={VERSION} />
+              : <LiveCapture />}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col w-full overflow-x-hidden" style={{ background: 'var(--c-bg)', color: 'var(--c-text)' }}>

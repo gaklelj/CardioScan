@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, CheckCircle } from 'lucide-react'
 import Nav from '../components/Nav'
 import { useLanguage } from '../LanguageContext'
+import { usePlatform } from '../hooks/usePlatform'
 import electrodsImg from '../assets/electrods.jpg'
 
 /* Thin ECG wave used as section divider */
@@ -21,9 +22,109 @@ function EcgDivider() {
   )
 }
 
+function GuideInner({ t, navigate, placements, tips, faq, arduinoSteps }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Disclaimer */}
+      <div style={{ display: 'flex', gap: 10, padding: '12px 14px', background: 'rgba(255,159,10,0.12)', borderRadius: 12 }}>
+        <AlertTriangle size={14} style={{ color: '#FF9F0A', flexShrink: 0, marginTop: 2 }} />
+        <p style={{ fontSize: 13, color: 'var(--ios-text-secondary)', lineHeight: 1.5, margin: 0 }}>{t('guideDisclaimer')}</p>
+      </div>
+
+      {/* Electrode image */}
+      <div>
+        <div className="ios-section-label" style={{ margin: '0 0 8px' }}>{t('electrodePlacementLabel').toUpperCase()}</div>
+        <div style={{ borderRadius: 16, overflow: 'hidden' }}>
+          <img src={electrodsImg} alt="Electrode placement" style={{ width: '100%', objectFit: 'cover', maxHeight: 200, display: 'block' }} />
+        </div>
+      </div>
+
+      {/* Placements */}
+      <div className="ios-list-group">
+        {placements.map(({ id, label, desc }, i, arr) => (
+          <div key={id}>
+            <div style={{ display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'flex-start' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--ios-text-secondary)', width: 36, flexShrink: 0, paddingTop: 2 }}>{id}</span>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ios-text-primary)', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 13, color: 'var(--ios-text-secondary)' }}>{desc}</div>
+              </div>
+            </div>
+            {i < arr.length - 1 && <div className="ios-list-sep" />}
+          </div>
+        ))}
+      </div>
+
+      {/* Tips */}
+      <div>
+        <div className="ios-section-label" style={{ margin: '0 0 8px' }}>{t('bestPracticesLabel').toUpperCase()}</div>
+        <div className="ios-list-group">
+          {tips.map((tip, i, arr) => (
+            <div key={i}>
+              <div style={{ display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'flex-start' }}>
+                <CheckCircle size={16} style={{ color: 'var(--ios-green)', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 15, color: 'var(--ios-text-primary)', margin: 0, lineHeight: 1.5 }}>{tip}</p>
+              </div>
+              {i < arr.length - 1 && <div className="ios-list-sep" style={{ marginLeft: 42 }} />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* FAQ */}
+      <div>
+        <div className="ios-section-label" style={{ margin: '0 0 8px' }}>{t('faqLabel').toUpperCase()}</div>
+        <div className="ios-list-group">
+          {faq.map(({ q, a }, i, arr) => (
+            <div key={q}>
+              <div style={{ padding: '12px 14px' }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ios-text-primary)', marginBottom: 4 }}>{q}</div>
+                <div style={{ fontSize: 13, color: 'var(--ios-text-secondary)', lineHeight: 1.5 }}>{a}</div>
+              </div>
+              {i < arr.length - 1 && <div className="ios-list-sep" />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Arduino steps */}
+      <div>
+        <div className="ios-section-label" style={{ margin: '0 0 8px' }}>{t('arduinoLabel').toUpperCase()}</div>
+        <div className="ios-list-group">
+          {arduinoSteps.map((step, i, arr) => (
+            <div key={i}>
+              <div style={{ display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'flex-start' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--ios-text-secondary)', width: 24, flexShrink: 0, paddingTop: 2 }}>{i + 1}</span>
+                <p style={{ fontSize: 15, color: 'var(--ios-text-primary)', margin: 0, lineHeight: 1.5 }}>{step}</p>
+              </div>
+              {i < arr.length - 1 && <div className="ios-list-sep" style={{ marginLeft: 50 }} />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <button
+        onClick={() => navigate('/analyze')}
+        style={{
+          width: '100%', padding: '16px', borderRadius: 14, border: 'none',
+          background: 'var(--ios-blue)', color: '#fff',
+          fontSize: 17, fontWeight: 600, cursor: 'pointer',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        {t('openAnalyzer')}
+      </button>
+
+      <div style={{ height: 8 }} />
+    </div>
+  )
+}
+
 export default function Guide() {
   const navigate = useNavigate()
   const { t } = useLanguage()
+  const { isIOS } = usePlatform()
 
   const placements = [
     { id: 'RA',    label: t('raLabel'), desc: t('raDesc') },
@@ -43,6 +144,19 @@ export default function Guide() {
   ]
 
   const arduinoSteps = [t('aStep1'), t('aStep2'), t('aStep3'), t('aStep4')]
+
+  if (isIOS) {
+    return (
+      <div className="ios-page">
+        <div className="ios-large-title-header" style={{ borderBottom: '0.5px solid var(--ios-separator)' }}>
+          <h1 className="ios-large-title">{t('guide')}</h1>
+        </div>
+        <div className="ios-scroll-content">
+          <GuideInner t={t} navigate={navigate} placements={placements} tips={tips} faq={faq} arduinoSteps={arduinoSteps} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col w-full overflow-x-hidden" style={{ background: 'var(--c-bg)', color: 'var(--c-text)' }}>
