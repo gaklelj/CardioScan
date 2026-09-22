@@ -26,21 +26,17 @@ logging.getLogger('werkzeug').setLevel(logging.INFO)
 logging.getLogger('engineio').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 
-# ── TFLite model ──────────────────────────────────────────────────────────────
+# ── Keras model ───────────────────────────────────────────────────────────────
 import tensorflow as tf
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.tflite')
-interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
-interpreter.allocate_tensors()
-_input_details = interpreter.get_input_details()
-_output_details = interpreter.get_output_details()
-_expected_len = _input_details[0]['shape'][1]  # 1000
-log.info('TFLite model loaded | input shape: %s', _input_details[0]['shape'])
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
+_model = tf.keras.models.load_model(MODEL_PATH)
+_expected_len = _model.input_shape[1]  # 1000
+log.info('Keras model loaded | input shape: %s', _model.input_shape)
 
 # Прогрев
 _dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
-interpreter.set_tensor(_input_details[0]['index'], _dummy)
-interpreter.invoke()
+_model.predict(_dummy, verbose=0)
 log.info('Model warmed up')
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -81,9 +77,7 @@ def run_model(ecg_points: list) -> dict:
     # (1, timesteps, 1)
     x = arr.reshape(1, _expected_len, 1)
 
-    interpreter.set_tensor(_input_details[0]['index'], x)
-    interpreter.invoke()
-    preds = interpreter.get_tensor(_output_details[0]['index'])[0]
+    preds = _model.predict(x, verbose=0)[0]
 
     result = {cls: float(conf) for cls, conf in zip(ECG_CLASSES[:len(preds)], preds)}
     top_class = max(result, key=result.get)
