@@ -97,6 +97,13 @@ export default function SerialMonitor() {
     refreshPorts()
   }, [refreshPorts])
 
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }, [])
+
   const startPolling = useCallback(() => {
     pollingRef.current = setInterval(async () => {
       if (!invoke) return
@@ -132,14 +139,7 @@ export default function SerialMonitor() {
         }
       }
     }, POLL_MS)
-  }, [t])
-
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-  }, [])
+  }, [t, stopPolling])
 
   const handleConnect = async () => {
     if (!invoke || !selectedPort) return
