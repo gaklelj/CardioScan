@@ -5,7 +5,6 @@ import { useLanguage } from '../LanguageContext'
 const ROBOFLOW_URL = 'https://detect.roboflow.com'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
 // Resize image to max 1280px before sending — large photos (5-15MB) exceed
 // Android Tauri IPC limit and cause silent failures
@@ -32,12 +31,12 @@ async function resizeToDataUrl(file, maxSide = 1280) {
 }
 
 async function roboflowPost(url, body, format) {
-  if (invoke && isMobile) {
-    // Native Rust path — bypasses WebView fetch restrictions on iOS & Android
+  if (invoke) {
+    // Native Rust path — bypasses WebView CORS/fetch restrictions on all Tauri platforms
     const result = await invoke('roboflow_infer', { url, body })
     return result
   }
-  // Web path — desktop browser
+  // Web path — plain browser (no Tauri)
   const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' } })
   if (format === 'image') {
     const blob = await res.blob()
