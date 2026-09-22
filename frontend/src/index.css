@@ -174,3 +174,261 @@ button { -webkit-tap-highlight-color: transparent; }
 ::-webkit-scrollbar-track     { background: transparent; }
 ::-webkit-scrollbar-thumb     { background: var(--c-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--c-border-sub); }
+
+/* ─── iOS Design System ────────────────────────────────────────── */
+
+/* iOS dark (default) */
+:root {
+  --ios-blue:            #0A84FF;
+  --ios-red:             #FF375F;
+  --ios-green:           #30D158;
+
+  --ios-bg:              #000000;
+  --ios-bg-secondary:    #1C1C1E;
+  --ios-bg-tertiary:     #2C2C2E;
+
+  --ios-fill-secondary:  rgba(120,120,128,0.20);
+  --ios-fill-tertiary:   rgba(120,120,128,0.12);
+
+  --ios-text-primary:    #FFFFFF;
+  --ios-text-secondary:  rgba(235,235,245,0.6);
+  --ios-text-tertiary:   rgba(235,235,245,0.3);
+
+  --ios-separator:       rgba(84,84,88,0.65);
+  --ios-tab-inactive:    rgba(235,235,245,0.45);
+
+  --ios-card-bg:         #1C1C1E;
+  --ios-grouped-bg:      #2C2C2E;
+}
+
+:root.light {
+  --ios-blue:            #007AFF;
+  --ios-red:             #FF3B30;
+  --ios-green:           #34C759;
+
+  --ios-bg:              #F2F2F7;
+  --ios-bg-secondary:    #FFFFFF;
+  --ios-bg-tertiary:     #FFFFFF;
+
+  --ios-fill-secondary:  rgba(120,120,128,0.16);
+  --ios-fill-tertiary:   rgba(120,120,128,0.08);
+
+  --ios-text-primary:    #000000;
+  --ios-text-secondary:  rgba(60,60,67,0.6);
+  --ios-text-tertiary:   rgba(60,60,67,0.3);
+
+  --ios-separator:       rgba(60,60,67,0.29);
+  --ios-tab-inactive:    rgba(60,60,67,0.45);
+
+  --ios-card-bg:         #FFFFFF;
+  --ios-grouped-bg:      #FFFFFF;
+}
+
+/* iOS shell */
+.ios-root {
+  min-height: 100dvh;
+  background: var(--ios-bg);
+  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Page container */
+.ios-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ios-bg);
+}
+
+/* Large title header */
+.ios-large-title-header {
+  padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
+  background: var(--ios-bg);
+}
+.ios-large-title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--ios-text-primary);
+  line-height: 1.1;
+  margin: 0 0 4px;
+}
+.ios-subtitle {
+  font-size: 15px;
+  color: var(--ios-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Scrollable content area */
+.ios-scroll-content {
+  padding: 0 16px calc(90px + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Section labels */
+.ios-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ios-text-secondary);
+  margin: 20px 4px 8px;
+}
+
+/* Cards */
+.ios-card {
+  background: var(--ios-card-bg);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.ios-heart-card {
+  padding: 8px 16px 12px;
+  margin-bottom: 0;
+}
+.ios-vital-card {
+  flex: 1;
+  padding: 14px 14px 16px;
+  min-width: 0;
+}
+
+/* List group (settings style) */
+.ios-list-group {
+  background: var(--ios-grouped-bg);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.ios-list-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s;
+}
+.ios-list-row:active {
+  background: var(--ios-fill-secondary);
+}
+.ios-list-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ios-list-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ios-list-title {
+  font-size: 17px;
+  font-weight: 400;
+  color: var(--ios-text-primary);
+  display: block;
+}
+.ios-list-desc {
+  font-size: 13px;
+  color: var(--ios-text-secondary);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ios-list-sep {
+  height: 1px;
+  background: var(--ios-separator);
+  margin-left: 58px;
+}
+
+/* Tab bar */
+.ios-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  background: rgba(18,18,20,0.94);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-top: 0.5px solid var(--ios-separator);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-top: 2px;
+}
+:root.light .ios-tab-bar {
+  background: rgba(250,250,252,0.94);
+}
+.ios-tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  gap: 4px;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ios-tab-item:active { transform: scale(0.86); }
+.ios-tab-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+/* Icon button */
+.ios-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ios-fill-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ios-text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Sub-page header (back nav style) */
+.ios-nav-header {
+  display: flex;
+  align-items: center;
+  padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+  background: var(--ios-bg);
+  border-bottom: 0.5px solid var(--ios-separator);
+  min-height: calc(env(safe-area-inset-top) + 52px);
+}
+.ios-nav-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ios-text-primary);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.ios-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--ios-blue);
+  font-size: 17px;
+  cursor: pointer;
+  padding: 4px 0;
+  -webkit-tap-highlight-color: transparent;
+}

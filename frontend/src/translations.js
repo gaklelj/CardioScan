@@ -116,6 +116,31 @@ const translations = {
     faq4q: 'Can I use a phone camera?',
     faq4a: 'Yes. Photograph the printed strip flat on a plain surface in good lighting, avoiding glare and shadows.',
 
+    /* iOS Tabs */
+    tabHome: 'Home',
+    tabAnalyze: 'Analyze',
+    tabGuide: 'Guide',
+
+    /* Serial Monitor */
+    serialTitle: 'Serial Monitor',
+    serialPort: 'Port',
+    serialBaud: 'Baud Rate',
+    serialNoPorts: 'No ports found',
+    serialRefresh: 'Refresh',
+    serialConnect: 'Connect',
+    serialDisconnect: 'Disconnect',
+    serialConnecting: 'Connecting…',
+    serialConnected: 'Connected',
+    serialNotConnected: 'Not Connected',
+    serialDisconnected: 'Device disconnected',
+    serialWaveform: 'ECG Waveform',
+    serialWaiting: 'Waiting for data…',
+    serialConnectFirst: 'Connect to a device to see the waveform',
+    serialLog: 'Serial Log',
+    serialClear: 'Clear',
+    serialLogEmpty: 'No data yet',
+    serialDesktopOnly: 'Serial Monitor is only available in the desktop app.',
+
     /* ImageUpload */
     tabFile: 'File',
     tabUrl: 'URL',
@@ -253,6 +278,31 @@ const translations = {
     faq4q: 'Можно ли использовать камеру телефона?',
     faq4a: 'Да. Фотографируйте ленту на ровной поверхности при хорошем освещении, избегая бликов и теней.',
 
+    /* iOS Tabs */
+    tabHome: 'Главная',
+    tabAnalyze: 'Анализ',
+    tabGuide: 'Гайд',
+
+    /* Serial Monitor */
+    serialTitle: 'Serial Monitor',
+    serialPort: 'Порт',
+    serialBaud: 'Скорость',
+    serialNoPorts: 'Портов не найдено',
+    serialRefresh: 'Обновить',
+    serialConnect: 'Подключить',
+    serialDisconnect: 'Отключить',
+    serialConnecting: 'Подключение…',
+    serialConnected: 'Подключено',
+    serialNotConnected: 'Не подключено',
+    serialDisconnected: 'Устройство отключилось',
+    serialWaveform: 'ЭКГ-форма волны',
+    serialWaiting: 'Ожидание данных…',
+    serialConnectFirst: 'Подключите устройство для отображения формы волны',
+    serialLog: 'Лог Serial',
+    serialClear: 'Очистить',
+    serialLogEmpty: 'Данных ещё нет',
+    serialDesktopOnly: 'Serial Monitor доступен только в десктопном приложении.',
+
     tabFile: 'Файл',
     tabUrl: 'URL',
     dropHere: 'Перетащите ЭКГ изображение сюда',
@@ -387,6 +437,31 @@ const translations = {
     faq3a: 'Дәлдік сурет сапасы мен Roboflow модел нұсқасына байланысты. Нәтижелерде сенімділік баллары бар — төмен сенімділікпен анықталғандарды абайлап қараңыз.',
     faq4q: 'Телефон камерасын пайдалана аламын ба?',
     faq4a: 'Иә. Басып шығарылған ленталарды жарық жерде жайпақ бетте бликтер мен көлеңкелерден аулақ жатқызып түсіріңіз.',
+
+    /* iOS Tabs */
+    tabHome: 'Басты',
+    tabAnalyze: 'Талдау',
+    tabGuide: 'Нұсқаулық',
+
+    /* Serial Monitor */
+    serialTitle: 'Serial Monitor',
+    serialPort: 'Порт',
+    serialBaud: 'Жылдамдық',
+    serialNoPorts: 'Порттар табылмады',
+    serialRefresh: 'Жаңарту',
+    serialConnect: 'Қосу',
+    serialDisconnect: 'Ажырату',
+    serialConnecting: 'Қосылуда…',
+    serialConnected: 'Қосылған',
+    serialNotConnected: 'Қосылмаған',
+    serialDisconnected: 'Құрылғы ажыратылды',
+    serialWaveform: 'ЭКГ толқын формасы',
+    serialWaiting: 'Деректер күтілуде…',
+    serialConnectFirst: 'Толқын формасын көру үшін құрылғыны қосыңыз',
+    serialLog: 'Serial Лог',
+    serialClear: 'Тазалау',
+    serialLogEmpty: 'Деректер жоқ',
+    serialDesktopOnly: 'Serial Monitor тек десктоп қосымшасында қол жетімді.',
 
     tabFile: 'Файл',
     tabUrl: 'URL',
