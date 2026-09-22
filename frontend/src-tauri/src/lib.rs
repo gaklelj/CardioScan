@@ -56,6 +56,47 @@ fn read_serial_data(state: tauri::State<SerialState>) -> Result<String, String> 
     }
 }
 
+// Native HTTP proxy for iOS/Android — bypasses WKWebView fetch restrictions
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use base64::Engine as _;
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+async fn roboflow_infer(url: String, body: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(&url)
+        .header("Content-Type", "text/plain")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+
+    if content_type.contains("image") {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok(serde_json::json!({
+            "type": "image",
+            "data": format!("data:{};base64,{}", content_type.split(';').next().unwrap_or("image/jpeg"), b64)
+        }))
+    } else {
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!({"error": text}));
+        Ok(serde_json::json!({
+            "type": "json",
+            "data": json
+        }))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -81,7 +122,7 @@ pub fn run() {
         ]);
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let builder = builder.invoke_handler(tauri::generate_handler![]);
+    let builder = builder.invoke_handler(tauri::generate_handler![roboflow_infer]);
 
     builder
         .run(tauri::generate_context!())

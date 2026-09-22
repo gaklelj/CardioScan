@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Usb, RefreshCw, Circle, Activity } from 'lucide-react'
+import { Usb, RefreshCw, Circle, Activity, ChevronLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import Nav from '../components/Nav'
 import { useLanguage } from '../LanguageContext'
+import { usePlatform } from '../hooks/usePlatform'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
@@ -67,8 +69,36 @@ function EcgCanvas({ data }) {
   )
 }
 
+function IOSNavHeader({ title }) {
+  const navigate = useNavigate()
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      padding: 'calc(env(safe-area-inset-top) + 8px) 12px 8px',
+      background: 'var(--ios-bg)',
+      borderBottom: '0.5px solid var(--ios-separator)',
+      position: 'relative',
+    }}>
+      <button onClick={() => navigate('/')} style={{
+        display: 'flex', alignItems: 'center', gap: 2,
+        background: 'none', border: 'none', color: 'var(--ios-blue)',
+        fontSize: 17, cursor: 'pointer', padding: '4px 0',
+        WebkitTapHighlightColor: 'transparent',
+      }}>
+        <ChevronLeft size={22} strokeWidth={2} />
+        <span>Back</span>
+      </button>
+      <span style={{
+        position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+        fontSize: 17, fontWeight: 600, color: 'var(--ios-text-primary)',
+      }}>{title}</span>
+    </div>
+  )
+}
+
 export default function SerialMonitor() {
   const { t } = useLanguage()
+  const { isIOS } = usePlatform()
   const [ports, setPorts] = useState([])
   const [selectedPort, setSelectedPort] = useState('')
   const [baudRate, setBaudRate] = useState(115200)
@@ -170,18 +200,18 @@ export default function SerialMonitor() {
 
   if (!invoke) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: 'var(--c-bg)', color: 'var(--c-text)' }}>
-        <Nav page="sub" title={t('serialTitle')} />
+      <div className={isIOS ? 'ios-page' : 'min-h-screen flex flex-col'} style={isIOS ? {} : { background: 'var(--c-bg)', color: 'var(--c-text)' }}>
+        {isIOS ? <IOSNavHeader title={t('serialTitle')} /> : <Nav page="sub" title={t('serialTitle')} />}
         <div className="flex-1 flex items-center justify-center">
-          <p style={{ color: 'var(--c-muted)' }}>{t('serialDesktopOnly')}</p>
+          <p style={{ color: isIOS ? 'var(--ios-text-secondary)' : 'var(--c-muted)' }}>{t('serialDesktopOnly')}</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--c-bg)', color: 'var(--c-text)' }}>
-      <Nav page="sub" title={t('serialTitle')} />
+    <div className={isIOS ? 'ios-page' : 'min-h-screen flex flex-col'} style={isIOS ? {} : { background: 'var(--c-bg)', color: 'var(--c-text)' }}>
+      {isIOS ? <IOSNavHeader title={t('serialTitle')} /> : <Nav page="sub" title={t('serialTitle')} />}
 
       <main className="flex-1 px-4 sm:px-6 py-8 max-w-4xl mx-auto w-full flex flex-col gap-6">
 

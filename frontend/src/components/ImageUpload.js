@@ -4,6 +4,26 @@ import { useLanguage } from '../LanguageContext'
 
 const ROBOFLOW_URL = 'https://detect.roboflow.com'
 
+const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
+
+async function roboflowPost(url, body, format) {
+  if (invoke) {
+    // Native path — bypasses WKWebView fetch restrictions on iOS
+    const result = await invoke('roboflow_infer', { url, body })
+    return result
+  }
+  // Web path
+  const res = await fetch(url, { method: 'POST', body })
+  if (format === 'image') {
+    const blob = await res.blob()
+    const dataUrl = await new Promise((resolve) => {
+      const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob)
+    })
+    return { type: 'image', data: dataUrl }
+  }
+  return { type: 'json', data: await res.json() }
+}
+
 function resizeImage(base64Str) {
   return new Promise((resolve) => {
     const img = new Image()
@@ -63,29 +83,16 @@ export default function ImageUpload({ apiKey, model, version }) {
     try {
       if (method === 'upload') {
         if (!file) { setErrorKey('errorSelectFile'); setLoading(false); return }
-        const reader = new FileReader()
-        reader.readAsDataURL(file)
-        reader.onload = async () => {
-          const resized = await resizeImage(reader.result)
-          if (format === 'image') {
-            const res = await fetch(buildUrl(), { method: 'POST', body: resized })
-            setResult({ type: 'image', data: URL.createObjectURL(await res.blob()) })
-          } else {
-            const res = await fetch(buildUrl(), { method: 'POST', body: resized })
-            setResult({ type: 'json', data: await res.json() })
-          }
-          setLoading(false)
-        }
+        const base64 = await new Promise((resolve) => {
+          const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(file)
+        })
+        const result = await roboflowPost(buildUrl(), base64, format)
+        setResult(result)
+        setLoading(false)
       } else {
         if (!url) { setErrorKey('errorEnterUrl'); setLoading(false); return }
-        const fullUrl = buildUrl(`&image=${encodeURIComponent(url)}`)
-        if (format === 'image') {
-          const res = await fetch(fullUrl, { method: 'POST' })
-          setResult({ type: 'image', data: URL.createObjectURL(await res.blob()) })
-        } else {
-          const res = await fetch(fullUrl, { method: 'POST' })
-          setResult({ type: 'json', data: await res.json() })
-        }
+        const result = await roboflowPost(buildUrl(`&image=${encodeURIComponent(url)}`), '', format)
+        setResult(result)
         setLoading(false)
       }
     } catch {

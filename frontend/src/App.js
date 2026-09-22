@@ -28,14 +28,12 @@ function AppRoutes() {
   if (isIOS) {
     return (
       <div className="ios-root">
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <Routes>
-            <Route path="/"        element={<IOSHome />} />
-            <Route path="/analyze" element={<IOSAnalyzerWrapper />} />
-            <Route path="/guide"   element={<IOSGuideWrapper />} />
-            <Route path="/serial"  element={<SerialMonitor />} />
-          </Routes>
-        </div>
+        <Routes>
+          <Route path="/"        element={<IOSHome />} />
+          <Route path="/analyze" element={<IOSAnalyzerWrapper />} />
+          <Route path="/guide"   element={<IOSGuideWrapper />} />
+          <Route path="/serial"  element={<SerialMonitor />} />
+        </Routes>
         {showTabBar && <IOSTabBar />}
       </div>
     )
