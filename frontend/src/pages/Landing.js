@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Monitor, Zap, ArrowRight, FileImage, BookOpen } from 'lucide-react'
 import Nav from '../components/Nav'
 import HeartAnatomy from '../components/HeartAnatomy'
+import heartImg from '../assets/Gemini_Generated_Image_f0mgkpf0mgkpf0mg-removebg-preview.png'
 import { useLanguage } from '../LanguageContext'
 
 /* ── Scanning ECG hero line ── */
@@ -88,9 +89,11 @@ function HeartViz() {
 
       {/* Heart */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <HeartAnatomy
+        <img
+          src={heartImg}
+          alt="heart"
           className="heart-float heart-beat"
-          style={{ width: '74%', height: '74%', filter: 'drop-shadow(0 0 20px rgba(140,20,10,0.60))' }}
+          style={{ width: '74%', height: '74%', objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(140,20,10,0.60))' }}
         />
       </div>
 
@@ -226,7 +229,7 @@ export default function Landing() {
           </div>
 
           {/* Right — anatomical heart */}
-          <div className="animate-fade-in w-52 sm:w-64 lg:w-80 shrink-0">
+          <div className="animate-fade-in w-64 sm:w-80 lg:w-96 shrink-0">
             <HeartViz />
           </div>
         </div>
