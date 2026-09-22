@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { UploadCloud, Link as LinkIcon, ImageIcon, Code2 } from 'lucide-react'
+import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
 const ROBOFLOW_URL = 'https://detect.roboflow.com'
@@ -26,6 +26,107 @@ async function roboflowPost(url, body, format) {
 }
 
 
+const CLASS_COLORS = {
+  'ST-elevation':        '#ef4444',
+  'ST-depression':       '#f59e0b',
+  'Atrial Fibrillation': '#f97316',
+  'Other':               '#a78bfa',
+  'Normal':              '#22c55e',
+}
+
+function ImageModal({ src, predictions, onClose, t }) {
+  const [scale, setScale] = useState(1)
+  const touch = useRef({ dist: 0, scale: 1 })
+  const clamp = (s) => Math.min(5, Math.max(1, s))
+
+  const onWheel = (e) => {
+    e.preventDefault()
+    setScale(s => clamp(s * (e.deltaY > 0 ? 0.9 : 1.1)))
+  }
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      touch.current.dist  = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      touch.current.scale = scale
+    }
+  }
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      setScale(clamp(touch.current.scale * dist / touch.current.dist))
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column' }}
+    >
+      {/* Header */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--c-card)', borderBottom: '1px solid var(--c-border)', flexShrink: 0 }}
+      >
+        <span style={{ fontSize: '13px', color: 'var(--c-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('reportTitle')}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button onClick={() => setScale(s => clamp(s * 1.25))} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><ZoomIn size={16} /></button>
+          <button onClick={() => setScale(s => clamp(s * 0.8))} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><ZoomOut size={16} /></button>
+          <button onClick={() => setScale(1)} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><RotateCcw size={15} /></button>
+          <button onClick={onClose} style={{ color: 'var(--c-muted)', cursor: 'pointer', padding: '4px', marginLeft: '4px' }}><X size={18} /></button>
+        </div>
+      </div>
+
+      {/* Image area — scrollable for panning when zoomed */}
+      <div
+        onClick={e => e.stopPropagation()}
+        onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '12px' }}
+      >
+        <img
+          src={src}
+          alt="ECG result"
+          draggable={false}
+          style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '10px', userSelect: 'none' }}
+        />
+      </div>
+
+      {/* Report panel */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--c-card)', borderTop: '1px solid var(--c-border)', padding: '12px 16px', flexShrink: 0, maxHeight: '40vh', overflowY: 'auto' }}
+      >
+        <p style={{ fontSize: '11px', color: 'var(--c-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>{t('reportFindings')}</p>
+        {predictions.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--c-muted)', textAlign: 'center', padding: '8px 0' }}>{t('noneDetected')}</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[...predictions].sort((a, b) => b.confidence - a.confidence).map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px',
+                  background: `${CLASS_COLORS[p.class] ?? '#6b7280'}18`,
+                  border: `1px solid ${CLASS_COLORS[p.class] ?? '#6b7280'}44`,
+                }}
+              >
+                <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: CLASS_COLORS[p.class] ?? 'var(--c-text)' }}>{p.class}</span>
+                <div style={{ flex: 2, height: '4px', borderRadius: '2px', background: 'var(--c-border)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(p.confidence * 100).toFixed(0)}%`, background: CLASS_COLORS[p.class] ?? '#6b7280', borderRadius: '2px' }} />
+                </div>
+                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: CLASS_COLORS[p.class] ?? 'var(--c-dim)', minWidth: '40px', textAlign: 'right' }}>
+                  {(p.confidence * 100).toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const card = { border: '1px solid var(--c-border)', background: 'var(--c-card)', borderRadius: '16px' }
 const inputSt = { background: 'transparent', border: '1px solid var(--c-border)', borderRadius: '12px', color: 'var(--c-text)' }
 
@@ -40,6 +141,7 @@ export default function ImageUpload({ apiKey, model, version }) {
   const [labels, setLabels]     = useState(true)
   const [stroke, setStroke]     = useState(2)
   const [result, setResult]     = useState(null)
+  const [modal, setModal]       = useState(false)
   const [loading, setLoading]   = useState(false)
   const [errorKey, setErrorKey] = useState(null)
   const [errorDetail, setErrorDetail] = useState(null)
@@ -81,12 +183,12 @@ export default function ImageUpload({ apiKey, model, version }) {
           roboflowPost(buildUrl(extra, 'image'), body, 'image'),
           roboflowPost(buildUrl(extra, 'json'), body, 'json'),
         ])
-        const count = jsonResult?.data?.predictions?.length ?? null
-        setResult({ ...imgResult, count })
+        const preds = jsonResult?.data?.predictions ?? []
+        setResult({ ...imgResult, count: preds.length, predictions: preds })
       } else {
         const result = await roboflowPost(buildUrl(extra, 'json'), body, 'json')
-        const count = result?.data?.predictions?.length ?? null
-        setResult({ ...result, count })
+        const preds = result?.data?.predictions ?? []
+        setResult({ ...result, count: preds.length, predictions: preds })
       }
       setLoading(false)
     } catch (err) {
@@ -268,7 +370,11 @@ export default function ImageUpload({ apiKey, model, version }) {
           </div>
           <div className="p-4 space-y-3">
             {result.type === 'image' ? (
-              <img src={result.data} alt="Inference result" className="w-full rounded-xl" />
+              <img
+                src={result.data} alt="Inference result"
+                className="w-full rounded-xl cursor-zoom-in"
+                onClick={() => setModal(true)}
+              />
             ) : (
               <pre className="text-xs overflow-auto max-h-80 font-mono leading-relaxed" style={{ color: 'var(--c-muted)' }}>
                 {JSON.stringify(result.data, null, 2)}
@@ -290,6 +396,15 @@ export default function ImageUpload({ apiKey, model, version }) {
             )}
           </div>
         </div>
+      )}
+
+      {modal && result?.type === 'image' && (
+        <ImageModal
+          src={result.data}
+          predictions={result.predictions ?? []}
+          onClose={() => setModal(false)}
+          t={t}
+        />
       )}
     </div>
   )

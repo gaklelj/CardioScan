@@ -162,6 +162,8 @@ const translations = {
     result: 'Result',
     detectedN: 'Detected:',
     noneDetected: 'No anomalies detected — try lowering the confidence threshold',
+    reportTitle: 'ECG Report',
+    reportFindings: 'Detected findings',
 
     /* LiveCapture */
     liveInfo: 'The Flask server captures your screen, sends frames to Roboflow, draws bounding boxes, and streams the result here via WebSocket.',
@@ -325,6 +327,8 @@ const translations = {
     result: 'Результат',
     detectedN: 'Обнаружено:',
     noneDetected: 'Аномалий не обнаружено — попробуй снизить порог уверенности',
+    reportTitle: 'Отчёт ЭКГ',
+    reportFindings: 'Обнаруженные отклонения',
 
     liveInfo: 'Сервер Flask захватывает ваш экран, отправляет кадры в Roboflow, рисует рамки и передаёт результат сюда через WebSocket.',
     liveFps: '~5 fps · ограничено задержкой API',
@@ -487,6 +491,8 @@ const translations = {
     result: 'Нәтиже',
     detectedN: 'Анықталды:',
     noneDetected: 'Ауытқулар анықталмады — сенімділік шегін төмендетіп көріңіз',
+    reportTitle: 'ЭКГ есебі',
+    reportFindings: 'Анықталған ауытқулар',
 
     liveInfo: 'Flask сервері экраныңызды жазады, кадрлерді Roboflow-ге жібереді, жолақтар салады және нәтижені WebSocket арқылы осыға жіберіп отырады.',
     liveFps: '~5 fps · API кідіруімен шектелген',
