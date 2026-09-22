@@ -1,0 +1,23 @@
+{
+  "short_name": "CardioScan",
+  "name": "CardioScan — AI ECG Analyzer",
+  "description": "AI-powered ECG analysis. Upload or stream live. Anomaly detection powered by Roboflow.",
+  "icons": [
+    {
+      "src": "Logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "Logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0c0c0c",
+  "background_color": "#0c0c0c",
+  "categories": ["medical", "health", "utilities"]
+}
