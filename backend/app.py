@@ -45,7 +45,7 @@ ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY', '')
 ROBOFLOW_PROJECT = os.getenv('ROBOFLOW_PROJECT', 'ecg.analyze')
 ROBOFLOW_VERSION = os.getenv('ROBOFLOW_VERSION', '5')
 
-ECG_CLASSES = ['Normal', 'Atrial Fibrillation', 'Other', 'Noise']
+ECG_CLASSES = ['Normal', 'Atrial Fibrillation', 'Other', 'Noise', 'ST-elevation', 'ST-depression']
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ def ecg_analyze():
 
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
 ecg_buffer = []
-BUFFER_SIZE = 187  # накапливаем до нужного размера для модели
+BUFFER_SIZE = input_shape[1]  # берём из модели автоматически (сейчас 1000)
 
 
 @socketio.on('ecg_data')
