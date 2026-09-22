@@ -5,15 +5,15 @@ import { useLanguage } from '../LanguageContext'
 const ROBOFLOW_URL = 'https://detect.roboflow.com'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
 async function roboflowPost(url, body, format) {
-  if (invoke && isIOS) {
-    // Native path — bypasses WKWebView fetch restrictions (iOS only)
+  if (invoke && isMobile) {
+    // Native Rust path — bypasses WebView fetch restrictions on iOS & Android
     const result = await invoke('roboflow_infer', { url, body })
     return result
   }
-  // Web path — works on Android WebView and browser
+  // Web path — desktop browser
   const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' } })
   if (format === 'image') {
     const blob = await res.blob()
