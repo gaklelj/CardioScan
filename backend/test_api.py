@@ -7,7 +7,7 @@ import random
 import requests
 
 BASE_URL = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else 'http://localhost:6767'
-TIMEOUT = 120
+TIMEOUT = 180
 
 OK = '\033[92m✓\033[0m'
 FAIL = '\033[91m✗\033[0m'
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     print(f'Target: {BASE_URL}')
     try:
         test_health()
-        # test_ecg_points()
+        test_ecg_points()
         test_ecg_empty()
         test_ecg_short_signal()
         print('\nDone.\n')

@@ -26,17 +26,21 @@ logging.getLogger('werkzeug').setLevel(logging.INFO)
 logging.getLogger('engineio').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 
-# ── Keras model ───────────────────────────────────────────────────────────────
+# ── TFLite model ──────────────────────────────────────────────────────────────
 import tensorflow as tf
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
-model = tf.keras.models.load_model(MODEL_PATH)
-input_shape = model.input_shape
-log.info('Model loaded | input shape: %s | output shape: %s', input_shape, model.output_shape)
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.tflite')
+interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+interpreter.allocate_tensors()
+_input_details = interpreter.get_input_details()
+_output_details = interpreter.get_output_details()
+_expected_len = _input_details[0]['shape'][1]  # 1000
+log.info('TFLite model loaded | input shape: %s', _input_details[0]['shape'])
 
-# Прогрев — первый инференс всегда медленный, делаем его до первого запроса
-_dummy = np.zeros((1, input_shape[1], 1), dtype=np.float32)
-model.predict(_dummy, verbose=0)
+# Прогрев
+_dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
+interpreter.set_tensor(_input_details[0]['index'], _dummy)
+interpreter.invoke()
 log.info('Model warmed up')
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -69,16 +73,17 @@ def run_model(ecg_points: list) -> dict:
         arr = (arr - mn) / (mx - mn)
 
     # Подгоняем длину под ожидаемый размер модели
-    expected_len = input_shape[1]  # второй dim (timesteps)
-    if len(arr) > expected_len:
-        arr = arr[:expected_len]
-    elif len(arr) < expected_len:
-        arr = np.pad(arr, (0, expected_len - len(arr)), mode='edge')
+    if len(arr) > _expected_len:
+        arr = arr[:_expected_len]
+    elif len(arr) < _expected_len:
+        arr = np.pad(arr, (0, _expected_len - len(arr)), mode='edge')
 
     # (1, timesteps, 1)
-    x = arr.reshape(1, expected_len, 1)
+    x = arr.reshape(1, _expected_len, 1)
 
-    preds = model.predict(x, verbose=0)[0]  # shape: (num_classes,)
+    interpreter.set_tensor(_input_details[0]['index'], x)
+    interpreter.invoke()
+    preds = interpreter.get_tensor(_output_details[0]['index'])[0]
 
     result = {cls: float(conf) for cls, conf in zip(ECG_CLASSES[:len(preds)], preds)}
     top_class = max(result, key=result.get)
@@ -103,7 +108,7 @@ def analyze_roboflow(image_bytes: bytes) -> dict:
 # ── REST API ──────────────────────────────────────────────────────────────────
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': 'best_ecg_model.h5'})
+    return jsonify({'status': 'ok', 'model': 'best_ecg_model.tflite'})
 
 
 @app.route('/api/ecg/analyze', methods=['POST'])
@@ -144,7 +149,7 @@ def ecg_analyze():
 
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
 ecg_buffer = []
-BUFFER_SIZE = input_shape[1]  # берём из модели автоматически (сейчас 1000)
+BUFFER_SIZE = _expected_len  # берём из модели автоматически (сейчас 1000)
 
 
 @socketio.on('ecg_data')
