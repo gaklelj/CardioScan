@@ -3,7 +3,7 @@ import { io } from 'socket.io-client'
 import { Play, Square, Info } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const SOCKET_URL = 'http://127.0.0.1:5001'
+const SOCKET_URL = 'https://foodtrack.beast-inside.kz/cardio'
 
 export default function LiveCapture() {
   const { t } = useLanguage()

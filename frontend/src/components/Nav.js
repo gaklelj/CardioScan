@@ -19,7 +19,7 @@ export default function Nav({ page = 'root', title }) {
   return (
     <nav
       className="sticky top-0 z-50 border-b nav-bg px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 w-full max-w-full overflow-hidden"
-      style={{ borderColor: 'var(--c-border)' }}
+      style={{ borderColor: 'var(--c-border)', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
     >
       {/* Left */}
       {page === 'root' ? (
