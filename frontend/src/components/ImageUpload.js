@@ -26,18 +26,42 @@ async function roboflowPost(url, body, format) {
 }
 
 
-const CLASS_COLORS = {
-  'ST-elevation':        '#ef4444',
-  'ST-depression':       '#f59e0b',
-  'Atrial Fibrillation': '#f97316',
-  'Other':               '#a78bfa',
-  'Normal':              '#22c55e',
+// Assign a stable color to any class name
+const PALETTE = ['#ef4444','#f97316','#f59e0b','#22c55e','#60a5fa','#a78bfa','#ec4899','#14b8a6']
+function classColor(cls) {
+  const c = (cls || '').toUpperCase()
+  if (c.includes('NORMAL'))                       return '#22c55e'
+  if (c.includes('ST-E') || c.includes('STE'))    return '#ef4444'
+  if (c.includes('ST-D') || c.includes('STD'))    return '#f59e0b'
+  if (c.includes('ST'))                           return '#f97316'
+  if (c.includes('AF') || c.includes('FIBR'))     return '#f97316'
+  if (c.startsWith('T'))                          return '#f59e0b'
+  if (c.startsWith('P'))                          return '#60a5fa'
+  if (c.includes('QRS') || c.startsWith('Q'))     return '#a78bfa'
+  if (c.includes('NOISE'))                        return '#6b7280'
+  let h = 0; for (const ch of cls) h = (h * 31 + ch.charCodeAt(0)) & 0xFFFF
+  return PALETTE[h % PALETTE.length]
+}
+
+// Group predictions by class → { class, count, avgConf, maxConf }
+function groupPredictions(predictions) {
+  const map = {}
+  for (const p of predictions) {
+    if (!map[p.class]) map[p.class] = { cls: p.class, count: 0, total: 0, max: 0 }
+    map[p.class].count++
+    map[p.class].total += p.confidence
+    map[p.class].max = Math.max(map[p.class].max, p.confidence)
+  }
+  return Object.values(map)
+    .map(g => ({ ...g, avg: g.total / g.count }))
+    .sort((a, b) => b.max - a.max)
 }
 
 function ImageModal({ src, predictions, onClose, t }) {
   const [scale, setScale] = useState(1)
   const touch = useRef({ dist: 0, scale: 1 })
   const clamp = (s) => Math.min(5, Math.max(1, s))
+  const groups = groupPredictions(predictions)
 
   const onWheel = (e) => {
     e.preventDefault()
@@ -60,66 +84,109 @@ function ImageModal({ src, predictions, onClose, t }) {
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', flexDirection: 'column' }}
     >
-      {/* Header */}
+      {/* Header — safe area aware */}
       <div
         onClick={e => e.stopPropagation()}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--c-card)', borderBottom: '1px solid var(--c-border)', flexShrink: 0 }}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          paddingBottom: '12px', paddingLeft: '16px', paddingRight: '16px',
+          background: 'rgba(10,10,10,0.95)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          flexShrink: 0,
+          backdropFilter: 'blur(12px)',
+        }}
       >
-        <span style={{ fontSize: '13px', color: 'var(--c-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('reportTitle')}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button onClick={() => setScale(s => clamp(s * 1.25))} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><ZoomIn size={16} /></button>
-          <button onClick={() => setScale(s => clamp(s * 0.8))} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><ZoomOut size={16} /></button>
-          <button onClick={() => setScale(1)} style={{ color: 'var(--c-dim)', cursor: 'pointer', padding: '4px' }}><RotateCcw size={15} /></button>
-          <button onClick={onClose} style={{ color: 'var(--c-muted)', cursor: 'pointer', padding: '4px', marginLeft: '4px' }}><X size={18} /></button>
+        <div>
+          <p style={{ fontSize: '15px', fontWeight: 600, color: '#fff', margin: 0 }}>{t('reportTitle')}</p>
+          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: 0, marginTop: '2px' }}>
+            {predictions.length > 0 ? `${predictions.length} ${t('detectedN').toLowerCase()} ${groups.length} ${t('reportClasses')}` : t('noneDetected')}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button onClick={() => setScale(s => clamp(s * 1.3))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomIn size={17} /></button>
+          <button onClick={() => setScale(s => clamp(s * 0.77))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomOut size={17} /></button>
+          <button onClick={() => setScale(1)} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><RotateCcw size={16} /></button>
+          <button
+            onClick={onClose}
+            style={{ color: '#fff', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.12)', marginLeft: '4px' }}
+          >
+            <X size={17} />
+          </button>
         </div>
       </div>
 
-      {/* Image area — scrollable for panning when zoomed */}
+      {/* Image — zoomable & scrollable */}
       <div
         onClick={e => e.stopPropagation()}
         onWheel={onWheel}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
-        style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '12px' }}
+        style={{ flex: 1, overflow: 'auto', padding: '12px', background: '#0a0a0a' }}
       >
         <img
           src={src}
           alt="ECG result"
           draggable={false}
-          style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '10px', userSelect: 'none' }}
+          style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '12px', userSelect: 'none' }}
         />
       </div>
 
-      {/* Report panel */}
+      {/* Findings panel */}
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--c-card)', borderTop: '1px solid var(--c-border)', padding: '12px 16px', flexShrink: 0, maxHeight: '40vh', overflowY: 'auto' }}
+        style={{
+          background: 'rgba(10,10,10,0.97)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingTop: '14px', paddingLeft: '16px', paddingRight: '16px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)',
+          flexShrink: 0, maxHeight: '38vh', overflowY: 'auto',
+          backdropFilter: 'blur(12px)',
+        }}
       >
-        <p style={{ fontSize: '11px', color: 'var(--c-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>{t('reportFindings')}</p>
-        {predictions.length === 0 ? (
-          <p style={{ fontSize: '13px', color: 'var(--c-muted)', textAlign: 'center', padding: '8px 0' }}>{t('noneDetected')}</p>
+        <p style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>
+          {t('reportFindings')}
+        </p>
+
+        {groups.length === 0 ? (
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '12px 0' }}>{t('noneDetected')}</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {[...predictions].sort((a, b) => b.confidence - a.confidence).map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px',
-                  background: `${CLASS_COLORS[p.class] ?? '#6b7280'}18`,
-                  border: `1px solid ${CLASS_COLORS[p.class] ?? '#6b7280'}44`,
-                }}
-              >
-                <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: CLASS_COLORS[p.class] ?? 'var(--c-text)' }}>{p.class}</span>
-                <div style={{ flex: 2, height: '4px', borderRadius: '2px', background: 'var(--c-border)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(p.confidence * 100).toFixed(0)}%`, background: CLASS_COLORS[p.class] ?? '#6b7280', borderRadius: '2px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
+            {groups.map((g) => {
+              const color = classColor(g.cls)
+              return (
+                <div
+                  key={g.cls}
+                  style={{
+                    borderRadius: '12px',
+                    padding: '10px 12px',
+                    background: `${color}14`,
+                    border: `1px solid ${color}40`,
+                    display: 'flex', flexDirection: 'column', gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color, lineHeight: 1.2, flex: 1 }}>{g.cls}</span>
+                    {g.count > 1 && (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, color,
+                        background: `${color}25`, borderRadius: '20px',
+                        padding: '1px 6px', flexShrink: 0,
+                      }}>×{g.count}</span>
+                    )}
+                  </div>
+                  {/* Confidence bar */}
+                  <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(g.max * 100).toFixed(0)}%`, background: color, borderRadius: '2px' }} />
+                  </div>
+                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: `${color}cc` }}>
+                    max {(g.max * 100).toFixed(1)}%
+                  </span>
                 </div>
-                <span style={{ fontSize: '12px', fontFamily: 'monospace', color: CLASS_COLORS[p.class] ?? 'var(--c-dim)', minWidth: '40px', textAlign: 'right' }}>
-                  {(p.confidence * 100).toFixed(1)}%
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
