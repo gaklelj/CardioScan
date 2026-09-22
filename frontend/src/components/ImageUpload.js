@@ -35,13 +35,14 @@ export default function ImageUpload({ apiKey, model, version }) {
   const [format, setFormat]     = useState('image')
   const [file, setFile]         = useState(null)
   const [url, setUrl]           = useState('')
-  const [confidence, setConf]   = useState(40)
+  const [confidence, setConf]   = useState(20)
   const [overlap, setOverlap]   = useState(30)
   const [labels, setLabels]     = useState(true)
   const [stroke, setStroke]     = useState(2)
   const [result, setResult]     = useState(null)
   const [loading, setLoading]   = useState(false)
   const [errorKey, setErrorKey] = useState(null)
+  const [errorDetail, setErrorDetail] = useState(null)
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef(null)
 
@@ -51,33 +52,46 @@ export default function ImageUpload({ apiKey, model, version }) {
     const f = e.dataTransfer.files[0]; if (f) { setFile(f); setErrorKey(null) }
   }
 
-  const buildUrl = (extra = '') => {
+  const buildUrl = (extra = '', fmt = format) => {
     let u = `${ROBOFLOW_URL}/${model}/${version}?api_key=${apiKey}`
-    u += `&confidence=${confidence}&overlap=${overlap}&format=${format}`
-    if (format === 'image') { if (labels) u += '&labels=on'; u += `&stroke=${stroke}` }
+    u += `&confidence=${confidence}&overlap=${overlap}&format=${fmt}`
+    if (fmt === 'image') { if (labels) u += '&labels=on'; u += `&stroke=${stroke}` }
     if (extra) u += extra
     return u
   }
 
   const runInference = async (e) => {
-    e.preventDefault(); setErrorKey(null); setResult(null); setLoading(true)
+    e.preventDefault(); setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
     try {
+      let body = ''
+      let extra = ''
       if (method === 'upload') {
         if (!file) { setErrorKey('errorSelectFile'); setLoading(false); return }
-        const base64 = await new Promise((resolve) => {
+        body = await new Promise((resolve) => {
           const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(file)
         })
-        const result = await roboflowPost(buildUrl(), base64, format)
-        setResult(result)
-        setLoading(false)
       } else {
         if (!url) { setErrorKey('errorEnterUrl'); setLoading(false); return }
-        const result = await roboflowPost(buildUrl(`&image=${encodeURIComponent(url)}`), '', format)
-        setResult(result)
-        setLoading(false)
+        extra = `&image=${encodeURIComponent(url)}`
       }
-    } catch {
+
+      if (format === 'image') {
+        // Run image + JSON in parallel so we can show prediction count
+        const [imgResult, jsonResult] = await Promise.all([
+          roboflowPost(buildUrl(extra, 'image'), body, 'image'),
+          roboflowPost(buildUrl(extra, 'json'), body, 'json'),
+        ])
+        const count = jsonResult?.data?.predictions?.length ?? null
+        setResult({ ...imgResult, count })
+      } else {
+        const result = await roboflowPost(buildUrl(extra, 'json'), body, 'json')
+        const count = result?.data?.predictions?.length ?? null
+        setResult({ ...result, count })
+      }
+      setLoading(false)
+    } catch (err) {
       setErrorKey('errorInference')
+      setErrorDetail(String(err?.message || err))
       setLoading(false)
     }
   }
@@ -240,8 +254,9 @@ export default function ImageUpload({ apiKey, model, version }) {
 
       {/* Error */}
       {errorKey && (
-        <div className="border rounded-xl px-4 py-3 text-sm" style={{ borderColor: 'var(--c-warn-border)', background: 'var(--c-warn-bg)', color: 'var(--c-warn-text)' }}>
-          {t(errorKey)}
+        <div className="border rounded-xl px-4 py-3 text-sm space-y-1" style={{ borderColor: 'var(--c-warn-border)', background: 'var(--c-warn-bg)', color: 'var(--c-warn-text)' }}>
+          <div>{t(errorKey)}</div>
+          {errorDetail && <div className="text-xs opacity-70 font-mono break-all">{errorDetail}</div>}
         </div>
       )}
 
@@ -251,13 +266,27 @@ export default function ImageUpload({ apiKey, model, version }) {
           <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--c-border)' }}>
             <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('result')}</p>
           </div>
-          <div className="p-4">
+          <div className="p-4 space-y-3">
             {result.type === 'image' ? (
               <img src={result.data} alt="Inference result" className="w-full rounded-xl" />
             ) : (
               <pre className="text-xs overflow-auto max-h-80 font-mono leading-relaxed" style={{ color: 'var(--c-muted)' }}>
                 {JSON.stringify(result.data, null, 2)}
               </pre>
+            )}
+            {result.count !== null && (
+              <div
+                className="text-sm px-3 py-2 rounded-lg text-center font-medium"
+                style={{
+                  background: result.count > 0 ? 'var(--c-warn-bg)' : 'var(--c-hover)',
+                  color: result.count > 0 ? 'var(--c-warn-text)' : 'var(--c-muted)',
+                  border: `1px solid ${result.count > 0 ? 'var(--c-warn-border)' : 'var(--c-border)'}`,
+                }}
+              >
+                {result.count > 0
+                  ? `${t('detectedN')} ${result.count}`
+                  : t('noneDetected')}
+              </div>
             )}
           </div>
         </div>

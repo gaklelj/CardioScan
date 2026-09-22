@@ -160,6 +160,8 @@ const translations = {
     errorEnterUrl: 'Please enter an image URL.',
     errorInference: 'Inference failed. Check your API key and parameters.',
     result: 'Result',
+    detectedN: 'Detected:',
+    noneDetected: 'No anomalies detected — try lowering the confidence threshold',
 
     /* LiveCapture */
     liveInfo: 'The Flask server captures your screen, sends frames to Roboflow, draws bounding boxes, and streams the result here via WebSocket.',
@@ -321,6 +323,8 @@ const translations = {
     errorEnterUrl: 'Пожалуйста, введите URL изображения.',
     errorInference: 'Ошибка анализа. Проверьте API-ключ и параметры.',
     result: 'Результат',
+    detectedN: 'Обнаружено:',
+    noneDetected: 'Аномалий не обнаружено — попробуй снизить порог уверенности',
 
     liveInfo: 'Сервер Flask захватывает ваш экран, отправляет кадры в Roboflow, рисует рамки и передаёт результат сюда через WebSocket.',
     liveFps: '~5 fps · ограничено задержкой API',
@@ -481,6 +485,8 @@ const translations = {
     errorEnterUrl: 'Суреттің URL-ін енгізіңіз.',
     errorInference: 'Талдау сәтсіз. API кілтін және параметрлерді тексеріңіз.',
     result: 'Нәтиже',
+    detectedN: 'Анықталды:',
+    noneDetected: 'Ауытқулар анықталмады — сенімділік шегін төмендетіп көріңіз',
 
     liveInfo: 'Flask сервері экраныңызды жазады, кадрлерді Roboflow-ге жібереді, жолақтар салады және нәтижені WebSocket арқылы осыға жіберіп отырады.',
     liveFps: '~5 fps · API кідіруімен шектелген',
