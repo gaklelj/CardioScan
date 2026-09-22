@@ -28,8 +28,13 @@ import tensorflow as tf
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
 model = tf.keras.models.load_model(MODEL_PATH)
-input_shape = model.input_shape  # например (None, 187, 1) или (None, 128, 128, 1)
+input_shape = model.input_shape
 log.info('Model loaded | input shape: %s | output shape: %s', input_shape, model.output_shape)
+
+# Прогрев — первый инференс всегда медленный, делаем его до первого запроса
+_dummy = np.zeros((1, input_shape[1], 1), dtype=np.float32)
+model.predict(_dummy, verbose=0)
+log.info('Model warmed up')
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
