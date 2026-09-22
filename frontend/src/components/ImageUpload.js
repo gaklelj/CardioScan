@@ -25,26 +25,6 @@ async function roboflowPost(url, body, format) {
   return { type: 'json', data: await res.json() }
 }
 
-function resizeImage(base64Str) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.src = base64Str
-    img.onload = () => {
-      const MAX = 1500
-      let { width, height } = img
-      if (width > height) {
-        if (width > MAX) { height *= MAX / width; width = MAX }
-      } else {
-        if (height > MAX) { width *= MAX / height; height = MAX }
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-      resolve(canvas.toDataURL('image/jpeg', 1.0))
-    }
-  })
-}
 
 const card = { border: '1px solid var(--c-border)', background: 'var(--c-card)', borderRadius: '16px' }
 const inputSt = { background: 'transparent', border: '1px solid var(--c-border)', borderRadius: '12px', color: 'var(--c-text)' }
