@@ -7,6 +7,30 @@ const ROBOFLOW_URL = 'https://detect.roboflow.com'
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
+// Resize image to max 1280px before sending — large photos (5-15MB) exceed
+// Android Tauri IPC limit and cause silent failures
+async function resizeToDataUrl(file, maxSide = 1280) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.88))
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 async function roboflowPost(url, body, format) {
   if (invoke && isMobile) {
     // Native Rust path — bypasses WebView fetch restrictions on iOS & Android
@@ -236,9 +260,7 @@ export default function ImageUpload({ apiKey, model, version }) {
       let extra = ''
       if (method === 'upload') {
         if (!file) { setErrorKey('errorSelectFile'); setLoading(false); return }
-        body = await new Promise((resolve) => {
-          const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(file)
-        })
+        body = await resizeToDataUrl(file)
       } else {
         if (!url) { setErrorKey('errorEnterUrl'); setLoading(false); return }
         extra = `&image=${encodeURIComponent(url)}`
