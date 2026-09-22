@@ -5,24 +5,24 @@
 
 /* ─── Theme variables ──────────────────────────────────────────── */
 :root {
-  --c-bg:          #0c0c0c;
-  --c-surface:     #101010;
-  --c-card:        #141414;
-  --c-hover:       #1c1c1c;
-  --c-border:      #1a1a1a;
-  --c-border-sub:  #222;
-  --c-text:        #e2e2e2;
-  --c-muted:       #555;
-  --c-dim:         #333;
-  --c-placeholder: #2a2a2a;
-  --c-accent:      #e2e2e2;
-  --c-accent-fg:   #0c0c0c;
-  --c-badge:       #161616;
-  --c-badge-text:  #444;
-  --c-warn-bg:     #130c0c;
-  --c-warn-border: #2a1a1a;
-  --c-warn-text:   #884444;
-  --bg-rgb: 12, 12, 12;
+  --c-bg:          #111116;
+  --c-surface:     #17171d;
+  --c-card:        #1c1c24;
+  --c-hover:       #24242e;
+  --c-border:      #2c2c3a;
+  --c-border-sub:  #3a3a4a;
+  --c-text:        #e4e4f0;
+  --c-muted:       #8080a0;
+  --c-dim:         #55556a;
+  --c-placeholder: #35354a;
+  --c-accent:      #e4e4f0;
+  --c-accent-fg:   #111116;
+  --c-badge:       #1e1e28;
+  --c-badge-text:  #686888;
+  --c-warn-bg:     #1c1218;
+  --c-warn-border: #3a2030;
+  --c-warn-text:   #c06080;
+  --bg-rgb: 17, 17, 22;
 }
 
 :root.light {
