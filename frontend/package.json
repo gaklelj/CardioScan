@@ -21,6 +21,7 @@
     "build": "BUILD_PATH=../static/dist react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "build:tauri": "react-scripts build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
