@@ -29,6 +29,9 @@ logging.getLogger('socketio').setLevel(logging.WARNING)
 # ── Keras model ───────────────────────────────────────────────────────────────
 import tensorflow as tf
 
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
+
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
 _model = tf.keras.models.load_model(MODEL_PATH)
 _expected_len = _model.input_shape[1]  # 1000
@@ -36,7 +39,7 @@ log.info('Keras model loaded | input shape: %s', _model.input_shape)
 
 # Прогрев
 _dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
-_model.predict(_dummy, verbose=0)
+_model(_dummy, training=False)
 log.info('Model warmed up')
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -77,7 +80,7 @@ def run_model(ecg_points: list) -> dict:
     # (1, timesteps, 1)
     x = arr.reshape(1, _expected_len, 1)
 
-    preds = _model.predict(x, verbose=0)[0]
+    preds = _model(x, training=False).numpy()[0]
 
     result = {cls: float(conf) for cls, conf in zip(ECG_CLASSES[:len(preds)], preds)}
     top_class = max(result, key=result.get)
