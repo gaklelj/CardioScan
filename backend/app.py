@@ -1,17 +1,11 @@
-from gevent import monkey
-monkey.patch_all()
-
 import os
 import base64
 import logging
 import numpy as np
 import requests
-from gevent.threadpool import ThreadPool
 from flask import Flask, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
-
-_pool = ThreadPool(2)
 
 load_dotenv()
 
@@ -28,9 +22,6 @@ logging.getLogger('socketio').setLevel(logging.WARNING)
 
 # ── Keras model ───────────────────────────────────────────────────────────────
 import tensorflow as tf
-
-tf.config.threading.set_inter_op_parallelism_threads(1)
-tf.config.threading.set_intra_op_parallelism_threads(1)
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
 _model = tf.keras.models.load_model(MODEL_PATH)
@@ -49,7 +40,7 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'fallback-dev-key')
 @app.before_request
 def log_request():
     log.info('→ %s %s', request.method, request.path)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY', '')
 ROBOFLOW_PROJECT = os.getenv('ROBOFLOW_PROJECT', 'ecg.analyze')
@@ -60,26 +51,18 @@ ECG_CLASSES = ['Normal', 'Atrial Fibrillation', 'Other', 'Noise', 'ST-elevation'
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 def run_model(ecg_points: list) -> dict:
-    """
-    Принимает список float-значений ЭКГ от приложения.
-    Нормализует, формирует батч под input_shape модели и возвращает предсказание.
-    """
     arr = np.array(ecg_points, dtype=np.float32)
 
-    # Нормализация 0–1
     mn, mx = arr.min(), arr.max()
     if mx - mn > 0:
         arr = (arr - mn) / (mx - mn)
 
-    # Подгоняем длину под ожидаемый размер модели
     if len(arr) > _expected_len:
         arr = arr[:_expected_len]
     elif len(arr) < _expected_len:
         arr = np.pad(arr, (0, _expected_len - len(arr)), mode='edge')
 
-    # (1, timesteps, 1)
     x = arr.reshape(1, _expected_len, 1)
-
     preds = _model(x, training=False).numpy()[0]
 
     result = {cls: float(conf) for cls, conf in zip(ECG_CLASSES[:len(preds)], preds)}
@@ -105,27 +88,19 @@ def analyze_roboflow(image_bytes: bytes) -> dict:
 # ── REST API ──────────────────────────────────────────────────────────────────
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': 'best_ecg_model.tflite'})
+    return jsonify({'status': 'ok', 'model': 'best_ecg_model.h5'})
 
 
 @app.route('/api/ecg/analyze', methods=['POST'])
 def ecg_analyze():
-    """
-    Анализ ЭКГ через локальную модель.
-
-    JSON: { "points": [0.1, 0.4, 0.9, ...] }          — сырые значения
-    JSON: { "image": "<base64>" }                       — изображение → Roboflow
-    multipart: поле 'file'                              — изображение → Roboflow
-    """
     try:
         body = request.get_json(silent=True) or {}
 
         if 'points' in body:
-            result = _pool.apply(run_model, (body['points'],))
+            result = run_model(body['points'])
             log.info('Local model result: %s (%.2f)', result['class'], result['confidence'])
             return jsonify(result)
 
-        # Изображение → Roboflow
         if 'file' in request.files:
             image_bytes = request.files['file'].read()
         elif 'image' in body:
@@ -146,23 +121,18 @@ def ecg_analyze():
 
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
 ecg_buffer = []
-BUFFER_SIZE = _expected_len  # берём из модели автоматически (сейчас 1000)
+BUFFER_SIZE = _expected_len
 
 
 @socketio.on('ecg_data')
 def handle_ecg_data(data):
-    """
-    Принимает одну точку от приложения.
-    Формат: {'value': float, 'timestamp': int}
-    Когда накопится BUFFER_SIZE точек — прогоняет через модель и отдаёт результат.
-    """
     global ecg_buffer
     ecg_buffer.append(data['value'])
     emit('ecg_point', data, broadcast=True)
 
     if len(ecg_buffer) >= BUFFER_SIZE:
         try:
-            result = _pool.apply(run_model, (ecg_buffer[-BUFFER_SIZE:],))
+            result = run_model(ecg_buffer[-BUFFER_SIZE:])
             emit('ecg_analysis', result, broadcast=True)
             log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
@@ -172,16 +142,12 @@ def handle_ecg_data(data):
 
 @socketio.on('ecg_batch')
 def handle_ecg_batch(data):
-    """
-    Оффлайн пакет данных с ESP32.
-    Формат: { 'points': [float, ...] }
-    """
     points = data.get('points', [])
     emit('ecg_batch', data, broadcast=True)
 
     if points:
         try:
-            result = _pool.apply(run_model, (points,))
+            result = run_model(points)
             emit('ecg_analysis', result, broadcast=True)
             log.info('Batch analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
