@@ -6,4 +6,8 @@ requests==2.32.3
 numpy>=1.26.0,<2.2.0
 tensorflow-cpu==2.19.0
 flask-cors>=4.0.0
+<<<<<<< HEAD
 pyserial>=3.5
+=======
+ultralytics>=8.0.0
+>>>>>>> 65522138123c918569ed4f5ad8b9597e41d3e6b8
