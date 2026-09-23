@@ -75,14 +75,19 @@ def run_model(ecg_points: list) -> dict:
     }
 
 
-def analyze_roboflow(image_bytes: bytes) -> dict:
+def analyze_roboflow(image_bytes: bytes, confidence: int = 20, fmt: str = 'json',
+                     overlap: int = 30, labels: bool = True, stroke: int = 2):
     url = (
         f"https://detect.roboflow.com/{ROBOFLOW_PROJECT}/{ROBOFLOW_VERSION}"
-        f"?api_key={ROBOFLOW_API_KEY}"
+        f"?api_key={ROBOFLOW_API_KEY}&confidence={confidence}&overlap={overlap}&format={fmt}"
     )
+    if fmt == 'image':
+        url += f'&labels={"on" if labels else "off"}&stroke={stroke}'
     resp = requests.post(url, files={"file": image_bytes}, timeout=30)
     resp.raise_for_status()
-    return resp.json()
+    if fmt == 'image':
+        return resp.content, resp.headers.get('Content-Type', 'image/jpeg')
+    return resp.json(), None
 
 
 # ── REST API ──────────────────────────────────────────────────────────────────
@@ -108,8 +113,17 @@ def ecg_analyze():
         else:
             return jsonify({'error': 'Передай points (сырые значения) или file/image (изображение)'}), 400
 
-        predictions = analyze_roboflow(image_bytes)
-        return jsonify(predictions)
+        fmt        = request.args.get('format', 'json')
+        confidence = int(request.args.get('confidence', 20))
+        overlap    = int(request.args.get('overlap', 30))
+        labels     = request.args.get('labels', 'on') == 'on'
+        stroke     = int(request.args.get('stroke', 2))
+
+        data, content_type = analyze_roboflow(image_bytes, confidence, fmt, overlap, labels, stroke)
+        if fmt == 'image':
+            from flask import Response
+            return Response(data, content_type=content_type)
+        return jsonify(data)
 
     except requests.RequestException as e:
         log.error('Roboflow error: %s', e)
