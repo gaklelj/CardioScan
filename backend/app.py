@@ -94,10 +94,11 @@ def run_model(ecg_points: list) -> dict:
 
     result = {cls: float(conf) for cls, conf in zip(ECG_CLASSES[:len(preds)], preds)}
     top_class = max(result, key=result.get)
+    top_conf = result[top_class]
 
     return {
-        'class': top_class,
-        'confidence': result[top_class],
+        'class': top_class if top_conf >= 0.50 else 'Uncertain',
+        'confidence': top_conf,
         'all': result,
     }
 
