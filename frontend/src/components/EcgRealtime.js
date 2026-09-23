@@ -121,7 +121,7 @@ export default function EcgRealtime() {
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const transports = isMobileDevice ? ['polling'] : ['websocket']
+    const transports = ['polling']
     const socket = io(BACKEND, { path: SOCKET_PATH, transports })
     socketRef.current = socket
 

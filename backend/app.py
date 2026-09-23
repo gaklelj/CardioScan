@@ -412,9 +412,10 @@ import serial
 import serial.tools.list_ports
 import threading
 
-_ecg_thread  = None
-_ecg_running = False
-_serial_port = None
+_ecg_thread   = None
+_ecg_running  = False
+_serial_port  = None
+_ecg_owner_sid = None  # socket id, который запустил сканирование
 
 USB_KEYWORDS  = ['CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'USB']
 BT_BLACKLIST  = ['Bluetooth-Incoming-Port', 'debug-console']
@@ -462,7 +463,7 @@ def _serial_reader(port_name, baud=115200):
                 line = _serial_port.readline().decode('utf-8', errors='ignore').strip()
                 if not line:
                     continue
-                _emit_ecg_point(int(line))
+                _emit_ecg_point(int(float(line) * 1000) if '.' in line else int(line))
             except ValueError:
                 pass
             except Exception as e:
@@ -490,7 +491,8 @@ def _wifi_reader(host=ESP32_WIFI_HOST, port=ESP32_WIFI_PORT):
             try:
                 msg = ws.recv()
                 if msg:
-                    _emit_ecg_point(int(msg.strip()))
+                    s = msg.strip()
+                    _emit_ecg_point(int(float(s) * 1000) if '.' in s else int(s))
             except ValueError:
                 pass
         ws.close()
@@ -523,11 +525,13 @@ def handle_check_device(data=None):
 
 @socketio.on('start_ecg')
 def handle_start_ecg(data=None):
-    global _ecg_thread, _ecg_running
+    global _ecg_thread, _ecg_running, _ecg_owner_sid
     if _ecg_thread and _ecg_thread.is_alive():
         return
     mode = (data or {}).get('mode', 'usb')
     _ecg_running = True
+    _ecg_owner_sid = request.sid
+    log.info('ECG started by sid=%s mode=%s', request.sid, mode)
     if mode == 'wifi':
         _ecg_thread = threading.Thread(target=_wifi_reader, daemon=True)
     elif mode == 'bt':
@@ -549,8 +553,13 @@ def handle_start_ecg(data=None):
 
 @socketio.on('stop_ecg')
 def handle_stop_ecg():
-    global _ecg_running
+    global _ecg_running, _ecg_owner_sid
+    if _ecg_owner_sid and request.sid != _ecg_owner_sid:
+        log.info('stop_ecg ignored from sid=%s (owner=%s)', request.sid, _ecg_owner_sid)
+        return
+    log.info('ECG stopped by sid=%s', request.sid)
     _ecg_running = False
+    _ecg_owner_sid = None
 
 
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
