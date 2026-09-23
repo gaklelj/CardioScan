@@ -411,51 +411,58 @@ import serial
 import serial.tools.list_ports
 import threading
 
-_serial_thread = None
-_serial_running = False
-_serial_port    = None
+_ecg_thread  = None
+_ecg_running = False
+_serial_port = None
 
 USB_KEYWORDS  = ['CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'USB']
-ECG_BLACKLIST = ['Bluetooth-Incoming-Port', 'debug-console']
+BT_BLACKLIST  = ['Bluetooth-Incoming-Port', 'debug-console']
+ESP32_WIFI_HOST = '192.168.4.1'
+ESP32_WIFI_PORT = 81
 
-def _find_ecg_port():
-    """Найти порт ESP32: сначала USB, потом Bluetooth SPP."""
+def _find_usb_port():
     ports = serial.tools.list_ports.comports()
-    candidates = [p for p in ports if not any(b in p.name for b in ECG_BLACKLIST)]
-    # 1) Приоритет — USB-serial (CP210x, CH340 и т.д.)
-    for p in candidates:
+    for p in ports:
         desc = f'{p.description} {p.hwid} {p.name}'
         if any(k.lower() in desc.lower() for k in USB_KEYWORDS):
             return p.device
-    # 2) Bluetooth SPP (ESP32_ECG_Sim и подобные)
-    for p in candidates:
+    return None
+
+def _find_bt_port():
+    ports = serial.tools.list_ports.comports()
+    for p in ports:
+        if any(b in p.name for b in BT_BLACKLIST):
+            continue
         if 'cu.' in p.name and len(p.name) > 10:
             return p.device
     return None
 
+def _emit_ecg_point(value):
+    global ecg_buffer
+    socketio.emit('ecg_point', {'value': value})
+    ecg_buffer.append(value)
+    if len(ecg_buffer) >= BUFFER_SIZE:
+        try:
+            result = run_model(ecg_buffer[-BUFFER_SIZE:])
+            socketio.emit('ecg_analysis', result)
+            log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
+        except Exception as e:
+            log.error('Live analysis error: %s', e)
+        ecg_buffer = []
+
 def _serial_reader(port_name, baud=115200):
-    global _serial_running, _serial_port, ecg_buffer
+    global _ecg_running, _serial_port
     try:
-        _serial_port = serial.Serial(port_name, baud, timeout=1)
+        _serial_port = serial.Serial(port_name, baud, timeout=2)
         log.info('Serial opened: %s @ %d', port_name, baud)
         socketio.emit('device_status', {'connected': True, 'port': port_name})
-        while _serial_running:
+        while _ecg_running:
             try:
                 line = _serial_port.readline().decode('utf-8', errors='ignore').strip()
                 if not line:
                     continue
-                value = int(line)
-                socketio.emit('ecg_point', {'value': value})
-                ecg_buffer.append(value)
-                if len(ecg_buffer) >= BUFFER_SIZE:
-                    try:
-                        result = run_model(ecg_buffer[-BUFFER_SIZE:])
-                        socketio.emit('ecg_analysis', result)
-                        log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
-                    except Exception as e:
-                        log.error('Live analysis error: %s', e)
-                    ecg_buffer = []
-            except (ValueError, UnicodeDecodeError):
+                _emit_ecg_point(int(line))
+            except ValueError:
                 pass
             except Exception as e:
                 log.error('Serial read error: %s', e)
@@ -469,34 +476,80 @@ def _serial_reader(port_name, baud=115200):
         socketio.emit('device_status', {'connected': False})
         log.info('Serial closed')
 
+def _wifi_reader(host=ESP32_WIFI_HOST, port=ESP32_WIFI_PORT):
+    global _ecg_running
+    import websocket as _ws
+    url = f'ws://{host}:{port}'
+    log.info('WiFi WebSocket connecting: %s', url)
+    try:
+        ws = _ws.create_connection(url, timeout=5)
+        socketio.emit('device_status', {'connected': True, 'port': f'WiFi {host}'})
+        log.info('WiFi WebSocket connected')
+        while _ecg_running:
+            try:
+                msg = ws.recv()
+                if msg:
+                    _emit_ecg_point(int(msg.strip()))
+            except ValueError:
+                pass
+        ws.close()
+    except Exception as e:
+        log.error('WiFi read error: %s', e)
+        socketio.emit('device_status', {'connected': False, 'error': str(e)})
+    finally:
+        socketio.emit('device_status', {'connected': False})
+        log.info('WiFi closed')
+
 
 @socketio.on('check_ecg_device')
-def handle_check_device():
-    port = _find_ecg_port()
-    if port:
-        emit('device_status', {'connected': True, 'port': port})
+def handle_check_device(data=None):
+    mode = (data or {}).get('mode', 'usb')
+    if mode == 'wifi':
+        import socket as _sock
+        try:
+            s = _sock.create_connection((ESP32_WIFI_HOST, ESP32_WIFI_PORT), timeout=2)
+            s.close()
+            emit('device_status', {'connected': True, 'port': f'WiFi {ESP32_WIFI_HOST}'})
+        except Exception:
+            emit('device_status', {'connected': False})
+    elif mode == 'bt':
+        port = _find_bt_port()
+        emit('device_status', {'connected': bool(port), 'port': port or ''})
     else:
-        emit('device_status', {'connected': False})
+        port = _find_usb_port()
+        emit('device_status', {'connected': bool(port), 'port': port or ''})
 
 
 @socketio.on('start_ecg')
-def handle_start_ecg():
-    global _serial_thread, _serial_running
-    if _serial_thread and _serial_thread.is_alive():
+def handle_start_ecg(data=None):
+    global _ecg_thread, _ecg_running
+    if _ecg_thread and _ecg_thread.is_alive():
         return
-    port = _find_ecg_port()
-    if not port:
-        emit('device_status', {'connected': False})
-        return
-    _serial_running = True
-    _serial_thread = threading.Thread(target=_serial_reader, args=(port,), daemon=True)
-    _serial_thread.start()
+    mode = (data or {}).get('mode', 'usb')
+    _ecg_running = True
+    if mode == 'wifi':
+        _ecg_thread = threading.Thread(target=_wifi_reader, daemon=True)
+    elif mode == 'bt':
+        port = _find_bt_port()
+        if not port:
+            emit('device_status', {'connected': False})
+            _ecg_running = False
+            return
+        _ecg_thread = threading.Thread(target=_serial_reader, args=(port,), daemon=True)
+    else:
+        port = _find_usb_port()
+        if not port:
+            emit('device_status', {'connected': False})
+            _ecg_running = False
+            return
+        _ecg_thread = threading.Thread(target=_serial_reader, args=(port,), daemon=True)
+    _ecg_thread.start()
 
 
 @socketio.on('stop_ecg')
 def handle_stop_ecg():
-    global _serial_running
-    _serial_running = False
+    global _ecg_running
+    _ecg_running = False
 
 
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────

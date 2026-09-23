@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
-import { Play, Square, Activity, Cpu } from 'lucide-react'
+import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const ANALYZE_URL = 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
+const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
+const SOCKET_URL  = isMobileDevice ? 'https://foodtrack.beast-inside.kz/cardio' : 'http://localhost:6767'
+const ANALYZE_URL = isMobileDevice ? 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze' : 'http://localhost:6767/api/ecg/analyze'
 const MAX_POINTS  = 500
 const CANVAS_W    = 800
 const CANVAS_H    = 200
@@ -17,17 +19,24 @@ const CLASS_COLORS = {
   'Noise':               '#6b7280',
 }
 
+const CONN_MODES = [
+  { id: 'usb',  label: 'USB',       Icon: Usb       },
+  { id: 'bt',   label: 'Bluetooth', Icon: Bluetooth },
+  { id: 'wifi', label: 'WiFi',      Icon: Wifi      },
+]
+
 export default function EcgRealtime() {
   const { t } = useLanguage()
 
+  const [connMode,        setConnMode]        = useState('usb')
   const [serverOnline,    setServerOnline]    = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [deviceInfo,      setDeviceInfo]      = useState(null)
-  const [scanStatus,      setScanStatus]      = useState('idle')   // idle | scanning | done
+  const [scanStatus,      setScanStatus]      = useState('idle')
   const [duration,        setDuration]        = useState(0)
   const [sampleCount,     setSampleCount]     = useState(0)
   const [heartRate,       setHeartRate]       = useState(null)
-  const [aiStatus,        setAiStatus]        = useState('idle')   // idle | analyzing | done | error
+  const [aiStatus,        setAiStatus]        = useState('idle')
   const [aiResult,        setAiResult]        = useState(null)
 
   const canvasRef      = useRef(null)
@@ -36,21 +45,19 @@ export default function EcgRealtime() {
   const animFrameRef   = useRef(null)
   const scanStatusRef  = useRef('idle')
   const timerRef       = useRef(null)
+  const connModeRef    = useRef('usb')
 
   /* ─── Canvas draw loop ─────────────────────────────────────────── */
   const drawChart = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const W = CANVAS_W
-    const H = CANVAS_H
+    const W = CANVAS_W, H = CANVAS_H
     const buf = dataBufferRef.current
 
-    // Background
     ctx.fillStyle = '#0c0c0c'
     ctx.fillRect(0, 0, W, H)
 
-    // ECG-paper grid (faint red)
     ctx.strokeStyle = 'rgba(220,60,60,0.08)'
     ctx.lineWidth = 1
     const cols = 20, rows = 8
@@ -61,7 +68,6 @@ export default function EcgRealtime() {
       ctx.beginPath(); ctx.moveTo(0, (H / rows) * i); ctx.lineTo(W, (H / rows) * i); ctx.stroke()
     }
 
-    // Baseline
     ctx.strokeStyle = 'rgba(255,255,255,0.07)'
     ctx.lineWidth = 1
     ctx.setLineDash([6, 6])
@@ -121,17 +127,18 @@ export default function EcgRealtime() {
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['polling'] })
+    const socket = io(SOCKET_URL, { transports: ['websocket'] })
     socketRef.current = socket
 
     socket.on('connect', () => {
       setServerOnline(true)
-      socket.emit('check_ecg_device')
+      socket.emit('check_ecg_device', { mode: connModeRef.current })
     })
     socket.on('disconnect', () => { setServerOnline(false); setDeviceConnected(false) })
     socket.on('device_status', (data) => {
       setDeviceConnected(data.connected)
       if (data.connected) setDeviceInfo(data)
+      else setDeviceInfo(null)
     })
     socket.on('ecg_point', (data) => {
       dataBufferRef.current.push(data.value)
@@ -139,7 +146,6 @@ export default function EcgRealtime() {
       if (data.heart_rate) setHeartRate(data.heart_rate)
     })
     socket.on('ecg_analysis', (data) => {
-      // Keras model auto-fires every 1000 points
       setAiResult(data)
       setAiStatus('done')
     })
@@ -157,13 +163,22 @@ export default function EcgRealtime() {
     }
   }, [drawChart, analyzePoints])
 
+  /* ─── Re-check device when mode changes ────────────────────────── */
+  const handleModeChange = (mode) => {
+    setConnMode(mode)
+    connModeRef.current = mode
+    setDeviceConnected(false)
+    setDeviceInfo(null)
+    socketRef.current?.emit('check_ecg_device', { mode })
+  }
+
   /* ─── Controls ──────────────────────────────────────────────────── */
   const startScan = () => {
     dataBufferRef.current = []
     setSampleCount(0); setDuration(0); setHeartRate(null)
     setAiResult(null); setAiStatus('idle')
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
-    socketRef.current?.emit('start_ecg')
+    socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
   }
 
@@ -180,6 +195,42 @@ export default function EcgRealtime() {
   return (
     <div className="space-y-3">
 
+      {/* Connection mode selector */}
+      {!isMobileDevice && (
+        <div
+          className="border rounded-2xl p-3"
+          style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}
+        >
+          <div className="flex gap-2">
+            {CONN_MODES.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => handleModeChange(id)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+                style={{
+                  background: connMode === id ? 'var(--c-accent)' : 'transparent',
+                  color: connMode === id ? 'var(--c-accent-fg)' : 'var(--c-dim)',
+                  border: connMode === id ? 'none' : '1px solid var(--c-border)',
+                }}
+              >
+                <Icon size={11} />
+                {label}
+              </button>
+            ))}
+          </div>
+          {connMode === 'wifi' && (
+            <p className="text-xs mt-2" style={{ color: 'var(--c-dim)' }}>
+              Подключитесь к WiFi сети <strong style={{ color: 'var(--c-muted)' }}>CardioScan_ECG</strong> (пароль: <strong style={{ color: 'var(--c-muted)' }}>cardio123</strong>)
+            </p>
+          )}
+          {connMode === 'bt' && (
+            <p className="text-xs mt-2" style={{ color: 'var(--c-dim)' }}>
+              Убедитесь что ESP32_ECG_Sim сопряжён в Системных настройках → Bluetooth
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Connection status */}
       <div
         className="border rounded-2xl p-4 space-y-3"
@@ -189,34 +240,22 @@ export default function EcgRealtime() {
           {t('deviceStatus')}
         </p>
         <div className="flex items-center gap-5 flex-wrap">
-          {/* Server */}
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${serverOnline ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'}`}
             />
-            <span className="text-xs" style={{ color: 'var(--c-muted)' }}>
-              Flask Server
-            </span>
+            <span className="text-xs" style={{ color: 'var(--c-muted)' }}>Flask Server</span>
             {!serverOnline && (
               <span className="text-xs" style={{ color: 'var(--c-dim)' }}>— {t('serverOffline')}</span>
             )}
           </div>
-
-          {/* Device */}
           <div className="flex items-center gap-2">
             <Cpu size={11} style={{ color: deviceConnected ? '#22c55e' : 'var(--c-dim)' }} />
             <span className="text-xs" style={{ color: 'var(--c-muted)' }}>
               {deviceConnected ? t('deviceConnected') : t('deviceNotConnected')}
             </span>
             {deviceInfo?.port && (
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>
-                {deviceInfo.port}
-              </span>
-            )}
-            {deviceInfo?.baud_rate && (
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>
-                {deviceInfo.baud_rate} baud
-              </span>
+              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{deviceInfo.port}</span>
             )}
           </div>
         </div>
@@ -231,10 +270,7 @@ export default function EcgRealtime() {
           style={{ background: 'var(--c-accent)', color: 'var(--c-accent-fg)' }}
         >
           {scanStatus === 'scanning' ? (
-            <>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
-              {t('scanScanning')}
-            </>
+            <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />{t('scanScanning')}</>
           ) : (
             <><Play size={13} /> {t('startScan')}</>
           )}
@@ -249,12 +285,8 @@ export default function EcgRealtime() {
         </button>
       </div>
 
-      {/* Waveform display */}
-      <div
-        className="border rounded-2xl overflow-hidden"
-        style={{ borderColor: 'var(--c-border)' }}
-      >
-        {/* Status bar */}
+      {/* Waveform */}
+      <div className="border rounded-2xl overflow-hidden" style={{ borderColor: 'var(--c-border)' }}>
         <div
           className="flex items-center justify-between px-4 py-2.5 border-b flex-wrap gap-2"
           style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}
@@ -265,35 +297,18 @@ export default function EcgRealtime() {
               style={scanStatus !== 'scanning' ? { background: 'var(--c-border)' } : {}}
             />
             <span className="text-xs" style={{ color: 'var(--c-dim)' }}>
-              {scanStatus === 'scanning'
-                ? t('scanScanning')
-                : scanStatus === 'done'
-                  ? t('scanDone')
-                  : t('scanIdle')}
+              {scanStatus === 'scanning' ? t('scanScanning') : scanStatus === 'done' ? t('scanDone') : t('scanIdle')}
             </span>
           </div>
           {scanStatus !== 'idle' && (
             <div className="flex items-center gap-4">
               <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{fmt(duration)}</span>
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>
-                {sampleCount} {t('samples')}
-              </span>
-              {heartRate && (
-                <span className="text-xs font-mono" style={{ color: '#f87171' }}>
-                  ♥ {heartRate} bpm
-                </span>
-              )}
+              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{sampleCount} {t('samples')}</span>
+              {heartRate && <span className="text-xs font-mono" style={{ color: '#f87171' }}>♥ {heartRate} bpm</span>}
             </div>
           )}
         </div>
-
-        {/* Canvas */}
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-        />
-
-        {/* Idle hint */}
+        <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
         {scanStatus === 'idle' && (
           <div
             className="flex items-center justify-center gap-2 py-3 border-t"
@@ -307,17 +322,9 @@ export default function EcgRealtime() {
 
       {/* AI result */}
       {(aiStatus === 'analyzing' || aiStatus === 'done' || aiStatus === 'error') && (
-        <div
-          className="border rounded-2xl overflow-hidden animate-fade-in"
-          style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}
-        >
-          <div
-            className="flex items-center justify-between px-4 py-3 border-b"
-            style={{ borderColor: 'var(--c-border)' }}
-          >
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>
-              {t('result')}
-            </p>
+        <div className="border rounded-2xl overflow-hidden animate-fade-in" style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--c-border)' }}>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('result')}</p>
             {aiStatus === 'analyzing' && (
               <span className="text-xs flex items-center gap-2" style={{ color: 'var(--c-dim)' }}>
                 <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
@@ -339,7 +346,6 @@ export default function EcgRealtime() {
             )}
             {aiStatus === 'done' && aiResult && (
               <div className="space-y-3">
-                {/* Main diagnosis */}
                 <div
                   className="flex items-center justify-between px-4 py-3 rounded-xl"
                   style={{
@@ -354,33 +360,25 @@ export default function EcgRealtime() {
                     {(aiResult.confidence * 100).toFixed(1)}%
                   </span>
                 </div>
-                {/* All classes */}
                 {aiResult.all && (
                   <div className="space-y-1.5">
-                    {Object.entries(aiResult.all)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([cls, conf]) => (
-                        <div key={cls} className="flex items-center gap-2">
-                          <span className="text-xs w-36 shrink-0 truncate" style={{ color: 'var(--c-dim)' }}>{cls}</span>
-                          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'var(--c-border)' }}>
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{ width: `${(conf * 100).toFixed(1)}%`, background: CLASS_COLORS[cls] ?? '#6b7280' }}
-                            />
-                          </div>
-                          <span className="text-xs font-mono w-10 text-right shrink-0" style={{ color: 'var(--c-dim)' }}>
-                            {(conf * 100).toFixed(1)}%
-                          </span>
+                    {Object.entries(aiResult.all).sort(([, a], [, b]) => b - a).map(([cls, conf]) => (
+                      <div key={cls} className="flex items-center gap-2">
+                        <span className="text-xs w-36 shrink-0 truncate" style={{ color: 'var(--c-dim)' }}>{cls}</span>
+                        <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'var(--c-border)' }}>
+                          <div className="h-full rounded-full transition-all" style={{ width: `${(conf * 100).toFixed(1)}%`, background: CLASS_COLORS[cls] ?? '#6b7280' }} />
                         </div>
-                      ))}
+                        <span className="text-xs font-mono w-10 text-right shrink-0" style={{ color: 'var(--c-dim)' }}>
+                          {(conf * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
             {aiStatus === 'error' && (
-              <p className="text-sm text-center py-4" style={{ color: 'var(--c-warn-text)' }}>
-                {t('errorInference')}
-              </p>
+              <p className="text-sm text-center py-4" style={{ color: 'var(--c-warn-text)' }}>{t('errorInference')}</p>
             )}
           </div>
         </div>
