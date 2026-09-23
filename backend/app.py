@@ -514,6 +514,13 @@ def _emit_ecg_point(value):
 
 def _serial_reader(port_name, baud=115200):
     global _ecg_running, _serial_port
+    # Закрываем предыдущее соединение если не закрылось — иначе порт "занят"
+    try:
+        if _serial_port and _serial_port.is_open:
+            _serial_port.close()
+            log.info('Closed previous serial port before reopening')
+    except Exception:
+        pass
     try:
         _serial_port = serial.Serial(port_name, baud, timeout=2)
         log.info('Serial opened: %s @ %d', port_name, baud)
@@ -533,9 +540,11 @@ def _serial_reader(port_name, baud=115200):
         log.error('Cannot open serial %s: %s', port_name, e)
         socketio.emit('device_status', {'connected': False, 'error': str(e)})
     finally:
-        if _serial_port and _serial_port.is_open:
-            _serial_port.close()
-        socketio.emit('device_status', {'connected': False})
+        try:
+            if _serial_port and _serial_port.is_open:
+                _serial_port.close()
+        except Exception:
+            pass
         log.info('Serial closed')
 
 def _wifi_reader(host=ESP32_WIFI_HOST, port=ESP32_WIFI_PORT):

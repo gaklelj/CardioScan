@@ -15,8 +15,8 @@ const RISK_COLORS = {
 }
 
 const CLASS_COLORS = {
-  NORM: '#22c55e', NOISE: '#6b7280',
-  STTC: '#f97316', MI: '#ef4444',
+  STTC: '#22c55e', NOISE: '#6b7280',
+  NORM: '#f97316', MI: '#ef4444',
   HYP:  '#f59e0b', CD:  '#a78bfa',
 }
 
