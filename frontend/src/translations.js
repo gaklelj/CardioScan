@@ -46,6 +46,9 @@ const translations = {
     tabRealtime: 'Real-Time ECG',
     tabUpload: 'Upload Image',
     tabLive: 'Live Capture',
+    tabRealtimeShort: 'Real-Time',
+    tabUploadShort: 'Upload',
+    tabLiveShort: 'Live',
     analyzerFooter: 'For informational use only. Not a substitute for professional medical advice.',
 
     /* EcgRealtime */
@@ -226,6 +229,9 @@ const translations = {
     tabRealtime: 'ЭКГ в реальном времени',
     tabUpload: 'Загрузить изображение',
     tabLive: 'Захват экрана',
+    tabRealtimeShort: 'ЭКГ',
+    tabUploadShort: 'Фото',
+    tabLiveShort: 'Камера',
     analyzerFooter: 'Только для информационных целей. Не заменяет профессиональную медицинскую консультацию.',
 
     deviceStatus: 'Состояние устройства',
@@ -398,6 +404,9 @@ const translations = {
     tabRealtime: 'Нақты уақытта ЭКГ',
     tabUpload: 'Суретті жүктеу',
     tabLive: 'Тікелей жазу',
+    tabRealtimeShort: 'ЭКГ',
+    tabUploadShort: 'Фото',
+    tabLiveShort: 'Камера',
     analyzerFooter: 'Тек ақпараттық мақсатта. Кәсіби медициналық кеңестің орнын алмастырмайды.',
 
     deviceStatus: 'Құрылғы күйі',

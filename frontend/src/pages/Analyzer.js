@@ -35,9 +35,9 @@ export default function Analyzer() {
   const { isIOS } = usePlatform()
 
   const tabs = [
-    { v: 'realtime', label: t('tabRealtime'), Icon: Activity },
-    { v: 'upload',   label: t('tabUpload'),   Icon: Upload },
-    { v: 'live',     label: t('tabLive'),     Icon: Monitor },
+    { v: 'realtime', label: t('tabRealtime'), short: t('tabRealtimeShort'), Icon: Activity },
+    { v: 'upload',   label: t('tabUpload'),   short: t('tabUploadShort'),   Icon: Upload },
+    { v: 'live',     label: t('tabLive'),     short: t('tabLiveShort'),     Icon: Monitor },
   ]
 
   if (isIOS) {
@@ -53,17 +53,18 @@ export default function Analyzer() {
             display: 'flex', background: 'var(--ios-fill-secondary)',
             borderRadius: 10, padding: 2, gap: 2, margin: '8px 0',
           }}>
-            {tabs.map(({ v, label, Icon }) => (
+            {tabs.map(({ v, short, Icon }) => (
               <button key={v} onClick={() => setTab(v)} style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 5, padding: '8px 4px', borderRadius: 8, border: 'none',
-                fontSize: 'clamp(10px, 3.2vw, 13px)', fontWeight: 500, cursor: 'pointer',
+                gap: 4, padding: '8px 4px', borderRadius: 8, border: 'none',
+                fontSize: 13, fontWeight: 500, cursor: 'pointer',
                 background: tab === v ? 'var(--ios-bg-secondary)' : 'transparent',
                 color: tab === v ? 'var(--ios-text-primary)' : 'var(--ios-text-secondary)',
                 WebkitTapHighlightColor: 'transparent',
                 transition: 'background 0.15s',
+                whiteSpace: 'nowrap',
               }}>
-                <Icon size={13} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                <Icon size={13} style={{ flexShrink: 0 }} /><span>{short}</span>
               </button>
             ))}
           </div>

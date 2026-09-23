@@ -44,6 +44,50 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev
 
+      # ── Build bundled Python backend (Windows only) ───────────────────────
+      - name: Build Python backend (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r backend/requirements.txt
+          cd backend
+          pyinstaller --onefile --name backend --distpath dist `
+            --hidden-import=tensorflow `
+            --hidden-import=flask_socketio `
+            --hidden-import=g4f `
+            --collect-all g4f `
+            start.py
+          New-Item -ItemType Directory -Force -Path "frontend\src-tauri\binaries"
+          Copy-Item "dist\backend.exe" "frontend\src-tauri\binaries\backend-x86_64-pc-windows-msvc.exe"
+          New-Item -ItemType Directory -Force -Path "frontend\src-tauri\model"
+          Copy-Item -Recurse "model\*" "frontend\src-tauri\model\"
+
+      # Create empty placeholder binaries for non-Windows platforms
+      # so Tauri bundler doesn't fail on externalBin
+      - name: Create backend placeholder (macOS arm64)
+        if: matrix.platform == 'macos-latest' && matrix.args == '--target aarch64-apple-darwin'
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          printf '#!/bin/sh\n' > frontend/src-tauri/binaries/backend-aarch64-apple-darwin
+          chmod +x frontend/src-tauri/binaries/backend-aarch64-apple-darwin
+
+      - name: Create backend placeholder (macOS x64)
+        if: matrix.platform == 'macos-latest' && matrix.args == '--target x86_64-apple-darwin'
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          printf '#!/bin/sh\n' > frontend/src-tauri/binaries/backend-x86_64-apple-darwin
+          chmod +x frontend/src-tauri/binaries/backend-x86_64-apple-darwin
+
+      - name: Create backend placeholder (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          printf '#!/bin/sh\n' > frontend/src-tauri/binaries/backend-x86_64-unknown-linux-gnu
+          chmod +x frontend/src-tauri/binaries/backend-x86_64-unknown-linux-gnu
+
+      # ─────────────────────────────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm install
@@ -73,23 +117,17 @@ jobs:
 
             ### Установка
             **macOS** — открой DMG, перетащи в Applications. Первый запуск: правый клик → Открыть → Открыть
-            **Windows** — запусти `.exe` установщик
+            **Windows** — запусти `.exe` установщик, бэкенд запускается автоматически
             **Linux** — `chmod +x *.AppImage && ./*.AppImage`
             **iOS** — через AltStore, Sideloadly или Apple Configurator 2
             **Android** — включи «Установку из неизвестных источников» и открой APK
 
             ---
 
-            ### Что нового в v1.1.0
-            - Зум-модалка переработана: единый скролл (картинка + карточки + сводка), нет чёрной пустоты
-            - Скролл-лок модалки работает корректно на iOS/Android (position:fixed)
-            - Карточки с находками и зелёная сводка теперь видны прямо под картинкой на главной странице
-            - Подсказка «нажми для просмотра» на изображении результата
-            - Адаптивные табы — текст не обрезается на маленьких экранах
-
             ### Возможности
             - **ЭКГ в реальном времени** — canvas, Keras AI (6 классов), автоанализ каждые 1000 точек
             - **Анализ фото ЭКГ** — Roboflow CV, зум-модалка, карточки находок, AI-сводка
+            - **G4F сводка** — работает на Windows без установки Python (встроенный бэкенд)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

@@ -25,7 +25,8 @@ logging.getLogger('socketio').setLevel(logging.WARNING)
 # ── Keras model ───────────────────────────────────────────────────────────────
 import tensorflow as tf
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
+_model_dir = os.environ.get('MODEL_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model'))
+MODEL_PATH = os.path.join(_model_dir, 'best_ecg_model.h5')
 _model = tf.keras.models.load_model(MODEL_PATH)
 _expected_len = _model.input_shape[1]  # 1000
 log.info('Keras model loaded | input shape: %s', _model.input_shape)
