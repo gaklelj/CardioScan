@@ -3,9 +3,16 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const BACKEND     = 'https://foodtrack.beast-inside.kz'
-const ANALYZE_URL = 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
-const ESP32_WS    = 'ws://192.168.4.1:81'
+const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
+// Десктоп → локальный бэкенд (он и читает USB/WiFi сам)
+// Мобайл  → VPS
+const BACKEND     = isMobileDevice
+  ? 'https://foodtrack.beast-inside.kz'
+  : 'http://localhost:6767'
+const SOCKET_PATH = isMobileDevice ? '/cardio/socket.io' : '/socket.io'
+const ANALYZE_URL = isMobileDevice
+  ? 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
+  : 'http://localhost:6767/api/ecg/analyze'
 const OFFLINE_KEY = 'ecg_offline_buffer'
 const MAX_POINTS  = 500
 const CANVAS_W    = 800
@@ -45,16 +52,13 @@ export default function EcgRealtime() {
   })
   const [flushStatus, setFlushStatus] = useState('idle')
 
-  const canvasRef       = useRef(null)
-  const socketRef       = useRef(null)
-  const dataBufferRef   = useRef([])
-  const animFrameRef    = useRef(null)
-  const scanStatusRef   = useRef('idle')
-  const timerRef        = useRef(null)
-  const connModeRef     = useRef('usb')
-  const serialPortRef   = useRef(null)
-  const serialReaderRef = useRef(null)
-  const espWsRef        = useRef(null)
+  const canvasRef     = useRef(null)
+  const socketRef     = useRef(null)
+  const dataBufferRef = useRef([])
+  const animFrameRef  = useRef(null)
+  const scanStatusRef = useRef('idle')
+  const timerRef      = useRef(null)
+  const connModeRef   = useRef('usb')
 
   /* ─── Canvas ────────────────────────────────────────────────────── */
   const drawChart = useCallback(() => {
@@ -111,17 +115,29 @@ export default function EcgRealtime() {
     animFrameRef.current = requestAnimationFrame(drawChart)
   }, [])
 
-  /* ─── Backend socket (только для inference) ─────────────────────── */
+  /* ─── Socket.io + animation loop ───────────────────────────────── */
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io(BACKEND, { path: '/cardio/socket.io', transports: ['polling'] })
+    const socket = io(BACKEND, { path: SOCKET_PATH, transports: ['polling'] })
     socketRef.current = socket
 
-    socket.on('connect',    () => setServerOnline(true))
-    socket.on('disconnect', () => setServerOnline(false))
+    socket.on('connect', () => {
+      setServerOnline(true)
+      socket.emit('check_ecg_device', { mode: connModeRef.current })
+    })
+    socket.on('disconnect', () => { setServerOnline(false); setDeviceConnected(false) })
+    socket.on('device_status', (data) => {
+      setDeviceConnected(data.connected)
+      setDeviceInfo(data.connected ? data : null)
+    })
+    socket.on('ecg_point', (data) => {
+      dataBufferRef.current.push(data.value)
+      setSampleCount(n => n + 1)
+      if (data.heart_rate) setHeartRate(data.heart_rate)
+    })
     // Бэкенд шлёт ecg_analysis каждые 1000 точек автоматически
     socket.on('ecg_analysis', (data) => { setAiResult(data); setAiStatus('done') })
 
@@ -133,112 +149,16 @@ export default function EcgRealtime() {
     return () => {
       cancelAnimationFrame(animFrameRef.current)
       clearInterval(timerRef.current)
+      socket.emit('stop_ecg')
       socket.disconnect()
       window.removeEventListener('online',  onOnline)
       window.removeEventListener('offline', onOffline)
     }
   }, [drawChart])
 
-  /* ─── Обработка каждой точки ────────────────────────────────────── */
-  // Вызывается из USB/BT/WiFi читалок
-  const pushValue = useCallback((value) => {
-    dataBufferRef.current.push(value)
-    setSampleCount(n => n + 1)
-
-    if (!navigator.onLine) {
-      // Нет интернета — копим в localStorage (WiFi AP режим)
-      try {
-        const stored = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]')
-        stored.push(value)
-        localStorage.setItem(OFFLINE_KEY, JSON.stringify(stored))
-        setOfflineCount(stored.length)
-      } catch {}
-      return
-    }
-
-    // Есть интернет — шлём на бэкенд, модель запускается каждые 1000 точек
-    socketRef.current?.emit('ecg_data', { value })
-  }, [])
-
-  /* ─── USB / Bluetooth: Web Serial API ──────────────────────────── */
-  const startSerial = useCallback(async () => {
-    if (!('serial' in navigator)) {
-      alert('Web Serial API недоступен.\nОткрой приложение в Chrome/Edge или используй десктоп-сборку.')
-      return false
-    }
-    try {
-      const port = await navigator.serial.requestPort()
-      await port.open({ baudRate: 115200 })
-      serialPortRef.current = port
-      setDeviceConnected(true)
-      setDeviceInfo({ port: 'Serial port' })
-
-      const decoder = new TextDecoderStream()
-      port.readable.pipeTo(decoder.writable).catch(() => {})
-      const reader = decoder.readable.getReader()
-      serialReaderRef.current = reader
-
-      // Читаем в фоне
-      ;(async () => {
-        let partial = ''
-        try {
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done || scanStatusRef.current !== 'scanning') break
-            partial += value
-            const lines = partial.split('\n')
-            partial = lines.pop()
-            for (const line of lines) {
-              const n = parseInt(line.trim())
-              if (!isNaN(n)) pushValue(n)
-            }
-          }
-        } catch {}
-        setDeviceConnected(false)
-        setDeviceInfo(null)
-      })()
-
-      return true
-    } catch (e) {
-      if (e.name !== 'AbortError') console.error('Serial error:', e)
-      setDeviceConnected(false)
-      setDeviceInfo(null)
-      return false
-    }
-  }, [pushValue])
-
-  const stopSerial = useCallback(async () => {
-    try { await serialReaderRef.current?.cancel() } catch {}
-    serialReaderRef.current = null
-    try { await serialPortRef.current?.close() } catch {}
-    serialPortRef.current = null
-    setDeviceConnected(false)
-    setDeviceInfo(null)
-  }, [])
-
-  /* ─── WiFi: прямой WebSocket к ESP32 AP ────────────────────────── */
-  const startWiFi = useCallback(() => {
-    const ws = new WebSocket(ESP32_WS)
-    espWsRef.current = ws
-    ws.onopen    = () => { setDeviceConnected(true); setDeviceInfo({ port: `WiFi ${ESP32_WS}` }) }
-    ws.onclose   = () => { setDeviceConnected(false); setDeviceInfo(null) }
-    ws.onerror   = () => { setDeviceConnected(false); setDeviceInfo(null) }
-    ws.onmessage = (e) => {
-      const n = parseInt(String(e.data).trim())
-      if (!isNaN(n)) pushValue(n)
-    }
-  }, [pushValue])
-
-  const stopWiFi = useCallback(() => {
-    espWsRef.current?.close()
-    espWsRef.current = null
-    setDeviceConnected(false)
-    setDeviceInfo(null)
-  }, [])
-
-  /* ─── Финальный анализ через REST ───────────────────────────────── */
+  /* ─── Анализ через REST ─────────────────────────────────────────── */
   const analyzePoints = useCallback(async (points) => {
-    if (!points.length || !navigator.onLine) return
+    if (!points.length) return
     setAiStatus('analyzing')
     try {
       const res  = await fetch(ANALYZE_URL, {
@@ -252,25 +172,20 @@ export default function EcgRealtime() {
     } catch { setAiStatus('error') }
   }, [])
 
-  /* ─── Старт / стоп сканирования ─────────────────────────────────── */
-  const startScan = async () => {
+  /* ─── Старт / стоп ──────────────────────────────────────────────── */
+  const startScan = () => {
     dataBufferRef.current = []
     setSampleCount(0); setDuration(0); setHeartRate(null)
     setAiResult(null); setAiStatus('idle')
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
+    socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
-
-    if (connModeRef.current === 'wifi') startWiFi()
-    else await startSerial()
   }
 
-  const stopScan = async () => {
+  const stopScan = () => {
     clearInterval(timerRef.current)
+    socketRef.current?.emit('stop_ecg')
     setScanStatus('done'); scanStatusRef.current = 'done'
-
-    if (connModeRef.current === 'wifi') stopWiFi()
-    else await stopSerial()
-
     analyzePoints(dataBufferRef.current)
   }
 
