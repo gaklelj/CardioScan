@@ -30,3 +30,5 @@ static/dist/
 npm-debug.log*
 
 .claude
+
+backend.exe
