@@ -57,8 +57,9 @@ jobs:
             --hidden-import=tensorflow `
             --hidden-import=flask_socketio `
             start.py
+          cd ..
           New-Item -ItemType Directory -Force -Path "frontend\src-tauri\binaries"
-          Copy-Item "dist\backend.exe" "frontend\src-tauri\binaries\backend-x86_64-pc-windows-msvc.exe"
+          Copy-Item "backend\dist\backend.exe" "frontend\src-tauri\binaries\backend-x86_64-pc-windows-msvc.exe"
           New-Item -ItemType Directory -Force -Path "frontend\src-tauri\model"
           Copy-Item -Recurse "model\*" "frontend\src-tauri\model\"
 
