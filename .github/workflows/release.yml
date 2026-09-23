@@ -18,10 +18,6 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
-          - platform: windows-latest
-            args: ''
-          - platform: ubuntu-22.04
-            args: ''
 
     runs-on: ${{ matrix.platform }}
 
@@ -124,6 +120,7 @@ jobs:
           args: ${{ matrix.args }}
 
   build-android:
+    if: false  # temporarily disabled
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
