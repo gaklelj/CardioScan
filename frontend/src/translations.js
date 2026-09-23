@@ -188,6 +188,23 @@ const translations = {
     frames: 'frames',
     pressStart: 'Press Start to begin',
     streamEnded: 'Stream ended',
+
+    /* Symptoms questionnaire */
+    sqTitle: 'Symptom Questionnaire',
+    sq1: 'Have you ever had pain or discomfort in your chest?',
+    sq1opt1: 'Yes', sq1opt2: 'No',
+    sq2: 'Does it occur when you walk uphill, hurry, or walk at an ordinary pace on level ground?',
+    sq2opt1: 'Uphill', sq2opt2: 'When hurrying', sq2opt3: 'At ordinary pace on level ground', sq2opt4: 'Not when walking',
+    sq3: 'Where exactly is the pain? (select all that apply)',
+    sq3opt1: 'Centre of the chest / breastbone', sq3opt2: 'Left side of the chest', sq3opt3: 'Left arm',
+    sq4: 'If you feel pain while walking, what do you do?',
+    sq4opt1: 'Stop', sq4opt2: 'Slow down', sq4opt3: 'Continue at the same pace',
+    sq5: 'How quickly does the pain go away when you stop?',
+    sq5opt1: 'Less than 10 minutes', sq5opt2: 'More than 10 minutes',
+    sq6: 'Does the pain occur when you are standing or sitting still?',
+    sq6opt1: 'Yes', sq6opt2: 'No',
+    sqBack: 'Back', sqNext: 'Next', sqDone: 'Submit', sqSkip: 'Skip questionnaire',
+    sqSymptomsCard: 'Patient Symptoms',
   },
 
   ru: {
@@ -363,6 +380,23 @@ const translations = {
     frames: 'кадров',
     pressStart: 'Нажмите Старт для начала',
     streamEnded: 'Трансляция завершена',
+
+    /* Symptoms questionnaire */
+    sqTitle: 'Анкета симптомов',
+    sq1: 'Бывает ли у вас когда-нибудь боль или дискомфорт в грудной клетке?',
+    sq1opt1: 'Да', sq1opt2: 'Нет',
+    sq2: 'Возникает ли она, когда вы идёте в гору, торопитесь или идёте обычным шагом по ровной местности?',
+    sq2opt1: 'В гору', sq2opt2: 'Торопясь', sq2opt3: 'Обычным шагом по ровной местности', sq2opt4: 'Не возникает при ходьбе',
+    sq3: 'Где именно болит? (можно выбрать несколько)',
+    sq3opt1: 'Центр грудины', sq3opt2: 'Левая сторона груди', sq3opt3: 'Левая рука',
+    sq4: 'Если вы чувствуете боль при ходьбе, что вы делаете?',
+    sq4opt1: 'Останавливаюсь', sq4opt2: 'Замедляюсь', sq4opt3: 'Продолжаю в том же темпе',
+    sq5: 'Как быстро проходит боль, когда вы остановились?',
+    sq5opt1: 'Меньше 10 минут', sq5opt2: 'Больше 10 минут',
+    sq6: 'Возникает ли боль когда вы стоите на месте или сидите?',
+    sq6opt1: 'Да', sq6opt2: 'Нет',
+    sqBack: 'Назад', sqNext: 'Далее', sqDone: 'Отправить', sqSkip: 'Пропустить анкету',
+    sqSymptomsCard: 'Симптомы пациента',
   },
 
   kz: {
@@ -538,6 +572,23 @@ const translations = {
     frames: 'кадр',
     pressStart: 'Бастау үшін Бастау-ды басыңыз',
     streamEnded: 'Трансляция аяқталды',
+
+    /* Symptoms questionnaire */
+    sqTitle: 'Симптомдар анкетасы',
+    sq1: 'Сізде кейде кеуде ауруы немесе ыңғайсыздық болады ма?',
+    sq1opt1: 'Иә', sq1opt2: 'Жоқ',
+    sq2: 'Ол жоғары қарай жүргенде, асығыс жүргенде немесе тегіс жолда қалыпты қадаммен жүргенде пайда болады ма?',
+    sq2opt1: 'Жоғары қарай', sq2opt2: 'Асығыс жүргенде', sq2opt3: 'Тегіс жолда қалыпты қадаммен', sq2opt4: 'Жүргенде пайда болмайды',
+    sq3: 'Дәл қайда ауырады? (бірнеше таңдауға болады)',
+    sq3opt1: 'Кеуденің ортасы / төс сүйегі', sq3opt2: 'Кеуденің сол жағы', sq3opt3: 'Сол қол',
+    sq4: 'Жүргенде ауру сезінсеңіз, не істейсіз?',
+    sq4opt1: 'Тоқтаймын', sq4opt2: 'Баяулаймын', sq4opt3: 'Сол қарқынмен жалғастырамын',
+    sq5: 'Тоқтаған кезде ауру қаншалықты тез басылады?',
+    sq5opt1: '10 минуттан аз', sq5opt2: '10 минуттан көп',
+    sq6: 'Орнында тұрып немесе отырып жатқанда ауру пайда болады ма?',
+    sq6opt1: 'Иә', sq6opt2: 'Жоқ',
+    sqBack: 'Артқа', sqNext: 'Келесі', sqDone: 'Жіберу', sqSkip: 'Анкетаны өткізіп жіберу',
+    sqSymptomsCard: 'Науқас симптомдары',
   },
 }
 

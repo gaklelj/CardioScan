@@ -90,6 +90,16 @@ body {
   to   { opacity: 1; }
 }
 
+/* ─── Symptoms modal animations ─────────────────────────────────── */
+@keyframes sqSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes sqSlideUpCard {
+  from { opacity: 0; transform: translateX(-50%) translateY(24px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 .animate-fade-up           { animation: fadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-fade-up-1         { animation-delay: 0.04s; }
 .animate-fade-up-2         { animation-delay: 0.10s; }
