@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Activity, ArrowLeft, Sun, Moon, ArrowRight, Usb } from 'lucide-react'
+import { Activity, ArrowLeft, Sun, Moon, ArrowRight, Usb, Clock } from 'lucide-react'
 import { useTheme } from '../ThemeContext'
 import { useLanguage } from '../LanguageContext'
 
@@ -69,6 +69,16 @@ export default function Nav({ page = 'root', title }) {
               onMouseLeave={e => e.currentTarget.style.color = 'var(--c-muted)'}
             >
               {t('guide')}
+            </button>
+            <button
+              onClick={() => navigate('/history')}
+              className="flex items-center gap-1.5 text-sm transition-colors cursor-pointer hidden sm:flex"
+              style={{ color: 'var(--c-muted)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--c-text)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--c-muted)'}
+            >
+              <Clock size={13} />
+              <span>{t('history')}</span>
             </button>
             {isTauri && (
               <button

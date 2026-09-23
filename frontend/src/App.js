@@ -7,6 +7,7 @@ import IOSHome from './pages/IOSHome'
 import Analyzer from './pages/Analyzer'
 import Guide from './pages/Guide'
 import SerialMonitor from './pages/SerialMonitor'
+import History from './pages/History'
 import IOSTabBar from './components/IOSTabBar'
 import './index.css'
 
@@ -22,7 +23,7 @@ function AppRoutes() {
   const location = useLocation()
 
   // iOS: show tab bar only on main tabs
-  const tabRoutes = ['/', '/analyze', '/guide']
+  const tabRoutes = ['/', '/analyze', '/guide', '/history']
   const showTabBar = isIOS && tabRoutes.includes(location.pathname)
 
   if (isIOS) {
@@ -33,6 +34,7 @@ function AppRoutes() {
           <Route path="/analyze" element={<IOSAnalyzerWrapper />} />
           <Route path="/guide"   element={<IOSGuideWrapper />} />
           <Route path="/serial"  element={<SerialMonitor />} />
+          <Route path="/history" element={<History />} />
         </Routes>
         {showTabBar && <IOSTabBar />}
       </div>
@@ -45,6 +47,7 @@ function AppRoutes() {
       <Route path="/analyze" element={<Analyzer />} />
       <Route path="/guide"   element={<Guide />} />
       <Route path="/serial"  element={<SerialMonitor />} />
+      <Route path="/history" element={<History />} />
     </Routes>
   )
 }

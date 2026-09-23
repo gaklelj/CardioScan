@@ -4,6 +4,7 @@ const translations = {
     back: 'Back',
     guide: 'Guide',
     analyze: 'Analyze',
+    history: 'History',
 
     /* Landing — hero */
     heroTitle1: 'ECG analysis',
@@ -220,6 +221,7 @@ const translations = {
     back: 'Назад',
     guide: 'Гайд',
     analyze: 'Анализ',
+    history: 'История',
 
     heroTitle1: 'Анализ ЭКГ',
     heroTitle2: 'без лишней сложности.',
@@ -421,6 +423,7 @@ const translations = {
     back: 'Артқа',
     guide: 'Нұсқаулық',
     analyze: 'Талдау',
+    history: 'Тарих',
 
     heroTitle1: 'ЭКГ талдауы',
     heroTitle2: 'күрделіліксіз.',

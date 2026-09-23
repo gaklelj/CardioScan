@@ -4,6 +4,8 @@ import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } f
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
 import RiskAssessmentCard from './RiskAssessmentCard'
+import useHistoryStore from '../store/useHistoryStore'
+import { saveRecord } from '../services/historyDB'
 
 const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
 // Десктоп → локальный бэкенд (он и читает USB/WiFi сам)
@@ -57,6 +59,31 @@ export default function EcgRealtime() {
   const [symptoms, setSymptoms]         = useState(null)
   const [riskData, setRiskData]         = useState(null)
   const [riskLoading, setRiskLoading]   = useState(false)
+
+  const { add: addToHistory } = useHistoryStore()
+  const historyId = useRef(null)
+
+  // Update history record when aiResult arrives
+  useEffect(() => {
+    if (!aiResult || !historyId.current) return
+    const store = useHistoryStore.getState()
+    const rec = store.records.find(r => r.id === historyId.current)
+    if (!rec) return
+    const updated = { ...rec, modelResult: aiResult, duration }
+    saveRecord(updated)
+    useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
+  }, [aiResult]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update history record when riskData arrives
+  useEffect(() => {
+    if (!riskData || !historyId.current) return
+    const store = useHistoryStore.getState()
+    const rec = store.records.find(r => r.id === historyId.current)
+    if (!rec) return
+    const updated = { ...rec, riskData, demographics: symptoms?.demographics ?? null }
+    saveRecord(updated)
+    useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
+  }, [riskData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch risk assessment when both symptoms + ECG result are available
   useEffect(() => {
@@ -210,11 +237,25 @@ export default function EcgRealtime() {
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
   }
 
-  const stopScan = () => {
+  const stopScan = async () => {
     clearInterval(timerRef.current)
     socketRef.current?.emit('stop_ecg')
     setScanStatus('done'); scanStatusRef.current = 'done'
-    analyzePoints(dataBufferRef.current)
+
+    const points = [...dataBufferRef.current]
+    analyzePoints(points)
+
+    // Save record to history immediately with points; model result will be updated via socket/analyzePoints
+    historyId.current = null
+    const rec = await addToHistory({
+      type:        'live',
+      ecgPoints:   points.slice(-2000), // save last 2000 pts for waveform preview
+      connMode:    connModeRef.current,
+      duration:    undefined, // will be set below via captured value
+      sampleCount: points.length,
+      heartRate:   heartRate ?? null,
+    })
+    historyId.current = rec.id
   }
 
   /* ─── Отправить офлайн-буфер ────────────────────────────────────── */

@@ -3,6 +3,7 @@ import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, Ro
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
 import RiskAssessmentCard from './RiskAssessmentCard'
+import useHistoryStore from '../store/useHistoryStore'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
@@ -280,7 +281,9 @@ export default function ImageUpload({ anthropicKey }) {
   const [symptoms, setSymptoms]         = useState(null)
   const [riskData, setRiskData]         = useState(null)
   const [riskLoading, setRiskLoading]   = useState(false)
-  const fileRef = useRef(null)
+  const fileRef   = useRef(null)
+  const historyId = useRef(null)   // id записи текущего исследования
+  const { add: addToHistory } = useHistoryStore()
 
   // Fetch risk assessment when both symptoms + predictions are available
   useEffect(() => {
@@ -306,6 +309,29 @@ export default function ImageUpload({ anthropicKey }) {
       .catch(() => setRiskLoading(false))
       .finally(() => setRiskLoading(false))
   }, [symptoms, result]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save / update history record when riskData arrives
+  useEffect(() => {
+    if (!riskData || !historyId.current) return
+    // Update existing record with riskData + demographics
+    const store = useHistoryStore.getState()
+    const rec = store.records.find(r => r.id === historyId.current)
+    if (!rec) return
+    const updated = { ...rec, riskData, demographics: symptoms?.demographics ?? null }
+    import('../services/historyDB').then(({ saveRecord }) => saveRecord(updated))
+    useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
+  }, [riskData]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update history record when aiSummary arrives
+  useEffect(() => {
+    if (!g4fSummary || !historyId.current) return
+    const store = useHistoryStore.getState()
+    const rec = store.records.find(r => r.id === historyId.current)
+    if (!rec) return
+    const updated = { ...rec, aiSummary: g4fSummary }
+    import('../services/historyDB').then(({ saveRecord }) => saveRecord(updated))
+    useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
+  }, [g4fSummary]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
   const handleDrop = (e) => {
@@ -354,13 +380,23 @@ export default function ImageUpload({ anthropicKey }) {
       const jsonData = await jsonResp.json()
       const preds = jsonData.predictions ?? []
 
+      let imgDataUrl = null
       if (format === 'image') {
         const imgResp = await fetch(`${BACKEND}/api/ecg/analyze?format=image&${params}`, { method: 'POST', headers, body })
-        const imgDataUrl = await blobToDataUrl(await imgResp.blob())
+        imgDataUrl = await blobToDataUrl(await imgResp.blob())
         setResult({ type: 'image', data: imgDataUrl, count: preds.length, predictions: preds })
       } else {
         setResult({ type: 'json', data: jsonData, count: preds.length, predictions: preds })
       }
+
+      // Save to history
+      historyId.current = null
+      const rec = await addToHistory({
+        type:            'upload',
+        ecgImageBase64:  imgDataUrl,
+        predictions:     preds,
+      })
+      historyId.current = rec.id
 
       setLoading(false)
       fetchAiReport(preds)
