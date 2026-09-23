@@ -432,3 +432,7 @@ button { -webkit-tap-highlight-color: transparent; }
   padding: 4px 0;
   -webkit-tap-highlight-color: transparent;
 }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}

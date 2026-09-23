@@ -165,6 +165,10 @@ const translations = {
     reportTitle: 'ECG Report',
     reportFindings: 'Detected findings',
     reportClasses: 'types',
+    aiReportTitle: 'AI Interpretation',
+    aiReportLoading: 'Generating AI report…',
+    aiReportError: 'Could not generate report.',
+    aiReportDisclaimer: 'For informational purposes only. Consult a physician.',
 
     /* LiveCapture */
     liveInfo: 'The Flask server captures your screen, sends frames to Roboflow, draws bounding boxes, and streams the result here via WebSocket.',
@@ -331,6 +335,10 @@ const translations = {
     reportTitle: 'Отчёт ЭКГ',
     reportFindings: 'Обнаруженные отклонения',
     reportClasses: 'типов',
+    aiReportTitle: 'ИИ-интерпретация',
+    aiReportLoading: 'Генерирую отчёт…',
+    aiReportError: 'Не удалось создать отчёт.',
+    aiReportDisclaimer: 'Только для информационных целей. Проконсультируйтесь с врачом.',
 
     liveInfo: 'Сервер Flask захватывает ваш экран, отправляет кадры в Roboflow, рисует рамки и передаёт результат сюда через WebSocket.',
     liveFps: '~5 fps · ограничено задержкой API',
@@ -496,6 +504,10 @@ const translations = {
     reportTitle: 'ЭКГ есебі',
     reportFindings: 'Анықталған ауытқулар',
     reportClasses: 'түрі',
+    aiReportTitle: 'ЖИ интерпретациясы',
+    aiReportLoading: 'Есеп жасалуда…',
+    aiReportError: 'Есепті жасау мүмкін болмады.',
+    aiReportDisclaimer: 'Тек ақпараттық мақсатта. Дәрігермен кеңесіңіз.',
 
     liveInfo: 'Flask сервері экраныңызды жазады, кадрлерді Roboflow-ге жібереді, жолақтар салады және нәтижені WebSocket арқылы осыға жіберіп отырады.',
     liveFps: '~5 fps · API кідіруімен шектелген',

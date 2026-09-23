@@ -7,9 +7,10 @@ import EcgRealtime from '../components/EcgRealtime'
 import { useLanguage } from '../LanguageContext'
 import { usePlatform } from '../hooks/usePlatform'
 
-const API_KEY = 'WapH9HvnhmB00awLAv3N'
-const MODEL   = 'ecg.analyze'
-const VERSION = '5'
+const API_KEY      = 'WapH9HvnhmB00awLAv3N'
+const MODEL        = 'ecg.analyze'
+const VERSION      = '5'
+const ANTHROPIC_KEY = 'YOUR_ANTHROPIC_API_KEY_HERE'
 
 /* Decorative mini ECG strip shown above the tabs */
 function EcgStrip() {
@@ -68,7 +69,7 @@ export default function Analyzer() {
           </div>
           <div key={tab}>
             {tab === 'realtime' ? <EcgRealtime />
-              : tab === 'upload' ? <ImageUpload apiKey={API_KEY} model={MODEL} version={VERSION} />
+              : tab === 'upload' ? <ImageUpload apiKey={API_KEY} model={MODEL} version={VERSION} anthropicKey={ANTHROPIC_KEY} />
               : <LiveCapture />}
           </div>
         </div>
@@ -122,7 +123,7 @@ export default function Analyzer() {
           {tab === 'realtime'
             ? <EcgRealtime />
             : tab === 'upload'
-              ? <ImageUpload apiKey={API_KEY} model={MODEL} version={VERSION} />
+              ? <ImageUpload apiKey={API_KEY} model={MODEL} version={VERSION} anthropicKey={ANTHROPIC_KEY} />
               : <LiveCapture />
           }
         </div>

@@ -60,6 +60,90 @@ fn read_serial_data(state: tauri::State<SerialState>) -> Result<String, String> 
 use base64::Engine as _;
 
 #[tauri::command]
+async fn ai_report(predictions: Vec<serde_json::Value>, lang: String, api_key: String) -> Result<String, String> {
+    if api_key.trim().is_empty() {
+        return Err("API key not configured".to_string());
+    }
+
+    // Build per-class summary: "ST-Elevation ×3 (max 94%)"
+    let mut class_map: std::collections::HashMap<String, (u32, f64)> = std::collections::HashMap::new();
+    for p in &predictions {
+        let cls = p.get("class").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
+        let conf = p.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let entry = class_map.entry(cls).or_insert((0, 0.0));
+        entry.0 += 1;
+        if conf > entry.1 { entry.1 = conf; }
+    }
+
+    let mut findings: Vec<String> = class_map.iter()
+        .map(|(cls, (cnt, max_conf))| {
+            if *cnt > 1 {
+                format!("{} ×{} (max {:.0}%)", cls, cnt, max_conf * 100.0)
+            } else {
+                format!("{} ({:.0}%)", cls, max_conf * 100.0)
+            }
+        })
+        .collect();
+    findings.sort();
+
+    let findings_text = if findings.is_empty() {
+        "No anomalies detected".to_string()
+    } else {
+        findings.join(", ")
+    };
+
+    let (lang_instruction, field_labels) = match lang.as_str() {
+        "ru" => (
+            "Ответь ТОЛЬКО на русском языке. НЕ используй английский.",
+            "Заключение: ...\nРекомендации: ...\nПримечание: Данный анализ выполнен ИИ и не заменяет консультацию врача.",
+        ),
+        "kz" => (
+            "Тек қазақ тілінде жауап бер. Ағылшын тілін пайдаланба.",
+            "Қорытынды: ...\nҰсыныстар: ...\nЕскерту: Бұл талдау ЖИ арқылы жасалған және дәрігердің кеңесін алмастырмайды.",
+        ),
+        _ => (
+            "Respond in English only.",
+            "Interpretation: ...\nRecommendation: ...\nDisclaimer: This analysis is AI-generated and does not replace professional medical advice.",
+        ),
+    };
+
+    let prompt = format!(
+        "You are a concise ECG interpretation assistant. Based on these computer vision detection results, write a brief clinical interpretation in 2-3 sentences, then a short recommendation. {}\n\nFormat:\n{}\n\nDetected findings: {}",
+        lang_instruction, field_labels, findings_text
+    );
+
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5",
+        "max_tokens": 600,
+        "messages": [{"role": "user", "content": prompt}]
+    });
+
+    let response = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key.trim())
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+
+    json["content"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            json.get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unexpected API response")
+                .to_string()
+        })
+}
+
+#[tauri::command]
 async fn roboflow_infer(url: String, body: String) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     let response = client
@@ -118,10 +202,11 @@ pub fn run() {
             disconnect_serial,
             read_serial_data,
             roboflow_infer,
+            ai_report,
         ]);
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let builder = builder.invoke_handler(tauri::generate_handler![roboflow_infer]);
+    let builder = builder.invoke_handler(tauri::generate_handler![roboflow_infer, ai_report]);
 
     builder
         .run(tauri::generate_context!())

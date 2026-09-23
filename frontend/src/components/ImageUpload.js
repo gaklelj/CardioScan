@@ -220,8 +220,8 @@ function ImageModal({ src, predictions, onClose, t }) {
 const card = { border: '1px solid var(--c-border)', background: 'var(--c-card)', borderRadius: '16px' }
 const inputSt = { background: 'transparent', border: '1px solid var(--c-border)', borderRadius: '12px', color: 'var(--c-text)' }
 
-export default function ImageUpload({ apiKey, model, version }) {
-  const { t } = useLanguage()
+export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
+  const { t, lang } = useLanguage()
   const [method, setMethod]     = useState('upload')
   const [format, setFormat]     = useState('image')
   const [file, setFile]         = useState(null)
@@ -236,6 +236,9 @@ export default function ImageUpload({ apiKey, model, version }) {
   const [errorKey, setErrorKey] = useState(null)
   const [errorDetail, setErrorDetail] = useState(null)
   const [dragging, setDragging] = useState(false)
+  const [aiReport, setAiReport]           = useState(null)
+  const [aiReportLoading, setAiReportLoading] = useState(false)
+  const [aiReportError, setAiReportError]   = useState(null)
   const fileRef = useRef(null)
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
@@ -252,8 +255,23 @@ export default function ImageUpload({ apiKey, model, version }) {
     return u
   }
 
+  const fetchAiReport = async (preds) => {
+    if (!invoke || !anthropicKey || anthropicKey === 'YOUR_ANTHROPIC_API_KEY_HERE') return
+    setAiReportLoading(true); setAiReport(null); setAiReportError(null)
+    try {
+      const text = await invoke('ai_report', { predictions: preds, lang, apiKey: anthropicKey })
+      setAiReport(text)
+    } catch (err) {
+      setAiReportError(String(err?.message || err))
+    } finally {
+      setAiReportLoading(false)
+    }
+  }
+
   const runInference = async (e) => {
-    e.preventDefault(); setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
+    e.preventDefault()
+    setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
+    setAiReport(null); setAiReportLoading(false); setAiReportError(null)
     try {
       let body = ''
       let extra = ''
@@ -265,20 +283,22 @@ export default function ImageUpload({ apiKey, model, version }) {
         extra = `&image=${encodeURIComponent(url)}`
       }
 
+      let preds = []
       if (format === 'image') {
         // Run image + JSON in parallel so we can show prediction count
         const [imgResult, jsonResult] = await Promise.all([
           roboflowPost(buildUrl(extra, 'image'), body, 'image'),
           roboflowPost(buildUrl(extra, 'json'), body, 'json'),
         ])
-        const preds = jsonResult?.data?.predictions ?? []
+        preds = jsonResult?.data?.predictions ?? []
         setResult({ ...imgResult, count: preds.length, predictions: preds })
       } else {
         const result = await roboflowPost(buildUrl(extra, 'json'), body, 'json')
-        const preds = result?.data?.predictions ?? []
+        preds = result?.data?.predictions ?? []
         setResult({ ...result, count: preds.length, predictions: preds })
       }
       setLoading(false)
+      fetchAiReport(preds)
     } catch (err) {
       setErrorKey('errorInference')
       setErrorDetail(String(err?.message || err))
@@ -480,6 +500,80 @@ export default function ImageUpload({ apiKey, model, version }) {
                 {result.count > 0
                   ? `${t('detectedN')} ${result.count}`
                   : t('noneDetected')}
+              </div>
+            )}
+
+            {/* AI Report */}
+            {(aiReportLoading || aiReport || aiReportError) && (
+              <div style={{
+                borderRadius: '14px',
+                border: '1px solid rgba(139,92,246,0.25)',
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(59,130,246,0.06) 100%)',
+                overflow: 'hidden',
+              }}>
+                {/* Header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 14px',
+                  borderBottom: '1px solid rgba(139,92,246,0.15)',
+                  background: 'rgba(139,92,246,0.07)',
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="rgba(139,92,246,0.9)" strokeWidth="2" strokeLinejoin="round"/>
+                    <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="rgba(139,92,246,0.9)" strokeWidth="2" strokeLinejoin="round"/>
+                  </svg>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(139,92,246,0.9)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    {t('aiReportTitle')}
+                  </span>
+                  {aiReportLoading && (
+                    <svg className="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10" stroke="rgba(139,92,246,0.3)" strokeWidth="3"/>
+                      <path d="M4 12a8 8 0 018-8" stroke="rgba(139,92,246,0.8)" strokeWidth="3" strokeLinecap="round"/>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '12px 14px' }}>
+                  {aiReportLoading && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                      {[85, 65, 75].map((w, i) => (
+                        <div key={i} style={{
+                          height: '10px', borderRadius: '5px',
+                          width: `${w}%`,
+                          background: 'linear-gradient(90deg, rgba(139,92,246,0.15) 25%, rgba(139,92,246,0.28) 50%, rgba(139,92,246,0.15) 75%)',
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmer 1.6s infinite',
+                        }} />
+                      ))}
+                    </div>
+                  )}
+
+                  {aiReport && (
+                    <p style={{
+                      fontSize: '13px', lineHeight: '1.7',
+                      color: 'var(--c-text)', margin: 0,
+                      whiteSpace: 'pre-wrap',
+                    }}>
+                      {aiReport}
+                    </p>
+                  )}
+
+                  {aiReportError && (
+                    <p style={{ fontSize: '12px', color: 'var(--c-warn-text)', margin: 0 }}>
+                      {t('aiReportError')}
+                    </p>
+                  )}
+
+                  {aiReport && (
+                    <p style={{
+                      fontSize: '10px', marginTop: '10px', marginBottom: 0,
+                      color: 'rgba(139,92,246,0.5)', fontStyle: 'italic',
+                    }}>
+                      {t('aiReportDisclaimer')}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
