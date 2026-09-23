@@ -56,8 +56,6 @@ jobs:
           pyinstaller --onefile --name backend --distpath dist `
             --hidden-import=tensorflow `
             --hidden-import=flask_socketio `
-            --hidden-import=g4f `
-            --collect-all g4f `
             start.py
           New-Item -ItemType Directory -Force -Path "frontend\src-tauri\binaries"
           Copy-Item "dist\backend.exe" "frontend\src-tauri\binaries\backend-x86_64-pc-windows-msvc.exe"
