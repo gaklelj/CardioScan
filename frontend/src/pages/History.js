@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Clock, Trash2, FileDown, Activity, Upload, Wifi, Usb, Bluetooth, Filter, AlertTriangle, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Clock, Trash2, FileDown, Activity, Upload, Wifi, Usb, Bluetooth, AlertTriangle, X } from 'lucide-react'
 import Nav from '../components/Nav'
 import useHistoryStore from '../store/useHistoryStore'
 import { generatePDF } from '../services/generatePDF'
