@@ -66,6 +66,7 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
+// eslint-disable-next-line no-unused-vars
 const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 const BACKEND = 'https://foodtrack.beast-inside.kz/cardio'
 
