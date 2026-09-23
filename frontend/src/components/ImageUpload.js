@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
@@ -80,9 +80,33 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
-function ImageModal({ src, predictions, onClose, t }) {
+const BACKEND = 'http://localhost:6767'
+
+function ImageModal({ src, predictions, onClose, t, lang }) {
   const [scale, setScale] = useState(1)
+  const [g4fSummary, setG4fSummary] = useState(null)
+  const [g4fLoading, setG4fLoading] = useState(false)
+  const [g4fError, setG4fError] = useState(null)
   const touch = useRef({ dist: 0, scale: 1 })
+
+  useEffect(() => {
+    if (predictions.length === 0) return
+    setG4fLoading(true)
+    setG4fSummary(null)
+    setG4fError(null)
+    fetch(`${BACKEND}/api/ecg/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ predictions, lang }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.summary) setG4fSummary(data.summary)
+        else setG4fError(true)
+      })
+      .catch(() => setG4fError(true))
+      .finally(() => setG4fLoading(false))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const clamp = (s) => Math.min(5, Math.max(1, s))
   const groups = groupPredictions(predictions)
 
@@ -210,6 +234,61 @@ function ImageModal({ src, predictions, onClose, t }) {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* G4F Summary */}
+        {(g4fLoading || g4fSummary || g4fError) && (
+          <div style={{
+            marginTop: '12px',
+            borderRadius: '12px',
+            border: '1px solid rgba(34,197,94,0.2)',
+            background: 'rgba(34,197,94,0.05)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '7px',
+              padding: '8px 12px',
+              borderBottom: '1px solid rgba(34,197,94,0.12)',
+              background: 'rgba(34,197,94,0.07)',
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="rgba(34,197,94,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                {t('g4fSummaryTitle')}
+              </span>
+              {g4fLoading && (
+                <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" stroke="rgba(34,197,94,0.25)" strokeWidth="3"/>
+                  <path d="M4 12a8 8 0 018-8" stroke="rgba(34,197,94,0.8)" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
+              )}
+            </div>
+            <div style={{ padding: '10px 12px' }}>
+              {g4fLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {[90, 70, 55].map((w, i) => (
+                    <div key={i} style={{
+                      height: '9px', borderRadius: '5px', width: `${w}%`,
+                      background: 'linear-gradient(90deg, rgba(34,197,94,0.1) 25%, rgba(34,197,94,0.22) 50%, rgba(34,197,94,0.1) 75%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'shimmer 1.6s infinite',
+                    }} />
+                  ))}
+                </div>
+              )}
+              {g4fSummary && (
+                <p style={{ fontSize: '12px', lineHeight: '1.65', color: 'rgba(255,255,255,0.8)', margin: 0, whiteSpace: 'pre-wrap' }}>
+                  {g4fSummary}
+                </p>
+              )}
+              {g4fError && (
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', margin: 0 }}>
+                  {t('g4fSummaryError')}
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -586,6 +665,7 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
           predictions={result.predictions ?? []}
           onClose={() => setModal(false)}
           t={t}
+          lang={lang}
         />
       )}
     </div>
