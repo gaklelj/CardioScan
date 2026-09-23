@@ -417,8 +417,8 @@ _serial_port = None
 
 USB_KEYWORDS  = ['CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'USB']
 BT_BLACKLIST  = ['Bluetooth-Incoming-Port', 'debug-console']
-ESP32_WIFI_HOST = '192.168.4.1'
-ESP32_WIFI_PORT = 81
+ESP32_WIFI_HOST = '192.168.4.1'   # дефолтный IP точки доступа ESP32
+ESP32_WIFI_PORT = 81              # WebSocket порт
 
 def _find_usb_port():
     ports = serial.tools.list_ports.comports()

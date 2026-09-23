@@ -1,89 +1,54 @@
 /*
-  ESP32 ECG Simulator — WiFi AP + WebSocket + Bluetooth + USB Serial
-  Передаёт симулированный ЭКГ-сигнал тремя способами одновременно:
-    1. USB Serial    (115200)             — Serial Monitor в приложении
-    2. Bluetooth SPP (ESP32_ECG_Sim)      — BT режим в приложении
-    3. WiFi AP + WebSocket порт 81        — WiFi режим в приложении
-       SSID: CardioScan_ECG  Pass: cardio123
-       ESP32 IP: 192.168.4.1
+  ESP32 ECG — WiFi AP + WebSocket + USB Serial
+  SSID: ESP32-ECG-WIFI  Password: 12345678
+  WebSocket: ws://192.168.4.1:81
 */
 
-#include <BluetoothSerial.h>
 #include <WiFi.h>
 #include <WebSocketsServer.h>
-#include <cmath>
 
-// ── WiFi AP настройки ────────────────────────────────────────────
-const char* AP_SSID = "CardioScan_ECG";
-const char* AP_PASS = "cardio123";
+const char* AP_SSID     = "ESP32-ECG-WIFI";
+const char* AP_PASSWORD = "12345678";
 
-// ── Параметры генерации ЭКГ ──────────────────────────────────────
-const float SAMPLE_RATE = 100.0;
-const float HEART_RATE  = 1.1;   // ~66 bpm
-
-BluetoothSerial SerialBT;
 WebSocketsServer wsServer(81);
 
+const int SAMPLE_RATE_HZ = 250;
 float phase = 0;
-
-float gaussian(float x, float a, float b, float c) {
-  return a * exp(-pow(x - b, 2) / (2 * pow(c, 2)));
-}
-
-int nextEcgValue() {
-  float x = fmod(phase, 1.0);
-  float v = 0;
-  v += gaussian(x,  0.15, 0.20, 0.02);   // P
-  v += gaussian(x,  1.00, 0.40, 0.01);   // R
-  v += gaussian(x, -0.20, 0.38, 0.01);   // Q
-  v += gaussian(x, -0.20, 0.42, 0.01);   // S
-  v += gaussian(x,  0.25, 0.60, 0.04);   // T
-  v += (float)(random(-50, 50)) / 2000.0;
-  phase += HEART_RATE / SAMPLE_RATE;
-  return (int)((v + 0.5) * 2000);
-}
-
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-  if (type == WStype_CONNECTED) {
-    Serial.printf("[WS] Client #%u connected\n", num);
-  } else if (type == WStype_DISCONNECTED) {
-    Serial.printf("[WS] Client #%u disconnected\n", num);
-  }
-}
+unsigned long lastMicros = 0;
+const unsigned long intervalMicros = 1000000 / SAMPLE_RATE_HZ;
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
 
-  // Bluetooth
-  SerialBT.begin("ESP32_ECG_Sim");
-  Serial.println("[BT] Started: ESP32_ECG_Sim");
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID, AP_PASSWORD);
 
-  // WiFi AP
-  WiFi.softAP(AP_SSID, AP_PASS);
-  Serial.printf("[WiFi] AP started: %s | IP: %s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+  Serial.println("--- Система запущена ---");
+  Serial.print("Сеть: ");     Serial.println(AP_SSID);
+  Serial.print("IP адрес: "); Serial.println(WiFi.softAPIP());
 
-  // WebSocket
   wsServer.begin();
-  wsServer.onEvent(webSocketEvent);
-  Serial.println("[WS] WebSocket server started on port 81");
+  Serial.println("WebSocket сервер запущен на порту 81");
 }
 
 void loop() {
   wsServer.loop();
 
-  int val = nextEcgValue();
-  String line = String(val);
+  if (micros() - lastMicros >= intervalMicros) {
+    lastMicros = micros();
 
-  // 1. USB Serial
-  Serial.println(line);
+    float val = sin(phase) * 0.15;
+    if (phase > 1.5 && phase < 1.62)  val = 1.3 + (float)(random(-5, 5)) / 100.0;
+    if (phase > 2.0 && phase < 2.5)   val = 0.25;
+    val += (float)(random(-15, 15)) / 400.0;
 
-  // 2. Bluetooth
-  if (SerialBT.hasClient()) {
-    SerialBT.println(line);
+    int16_t ecg_raw = (int16_t)(val * 1000);
+
+    Serial.println(ecg_raw);
+    wsServer.broadcastTXT(String(ecg_raw));
+
+    phase += 0.03;
+    if (phase > 2.0 * PI) phase -= 2.0 * PI;
   }
-
-  // 3. WiFi WebSocket — broadcast всем подключённым клиентам
-  wsServer.broadcastTXT(line);
-
-  delay(10);  // 100 Hz
 }

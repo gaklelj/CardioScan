@@ -220,7 +220,7 @@ export default function EcgRealtime() {
           </div>
           {connMode === 'wifi' && (
             <p className="text-xs mt-2" style={{ color: 'var(--c-dim)' }}>
-              Подключитесь к WiFi сети <strong style={{ color: 'var(--c-muted)' }}>CardioScan_ECG</strong> (пароль: <strong style={{ color: 'var(--c-muted)' }}>cardio123</strong>)
+              Подключитесь к WiFi сети <strong style={{ color: 'var(--c-muted)' }}>ESP32-ECG-WIFI</strong> (пароль: <strong style={{ color: 'var(--c-muted)' }}>12345678</strong>)
             </p>
           )}
           {connMode === 'bt' && (
