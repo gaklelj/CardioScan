@@ -422,17 +422,23 @@ _serial_thread = None
 _serial_running = False
 _serial_port    = None
 
-ECG_KEYWORDS = ['ESP32', 'CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'Bluetooth']
+USB_KEYWORDS  = ['CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'USB']
+ECG_BLACKLIST = ['Bluetooth-Incoming-Port', 'debug-console']
 
 def _find_ecg_port():
-    """Найти порт ESP32 (USB или Bluetooth Serial)."""
+    """Найти порт ESP32: сначала USB, потом Bluetooth SPP."""
     ports = serial.tools.list_ports.comports()
-    for p in ports:
+    candidates = [p for p in ports if not any(b in p.name for b in ECG_BLACKLIST)]
+    # 1) Приоритет — USB-serial (CP210x, CH340 и т.д.)
+    for p in candidates:
         desc = f'{p.description} {p.hwid} {p.name}'
-        if any(k.lower() in desc.lower() for k in ECG_KEYWORDS):
+        if any(k.lower() in desc.lower() for k in USB_KEYWORDS):
             return p.device
-    # fallback: первый доступный порт
-    return ports[0].device if ports else None
+    # 2) Bluetooth SPP (ESP32_ECG_Sim и подобные)
+    for p in candidates:
+        if 'cu.' in p.name and len(p.name) > 10:
+            return p.device
+    return None
 
 def _serial_reader(port_name, baud=115200):
     global _serial_running, _serial_port, ecg_buffer
