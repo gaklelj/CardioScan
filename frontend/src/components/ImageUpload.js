@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const ROBOFLOW_URL = 'https://detect.roboflow.com'
-
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
 // Resize image to max 1280px before sending — large photos (5-15MB) exceed
@@ -30,22 +28,10 @@ async function resizeToDataUrl(file, maxSide = 1280) {
   })
 }
 
-async function roboflowPost(url, body, format) {
-  if (invoke) {
-    // Native Rust path — bypasses WebView CORS/fetch restrictions on all Tauri platforms
-    const result = await invoke('roboflow_infer', { url, body })
-    return result
-  }
-  // Web path — plain browser (no Tauri)
-  const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' } })
-  if (format === 'image') {
-    const blob = await res.blob()
-    const dataUrl = await new Promise((resolve) => {
-      const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob)
-    })
-    return { type: 'image', data: dataUrl }
-  }
-  return { type: 'json', data: await res.json() }
+async function blobToDataUrl(blob) {
+  return new Promise((resolve) => {
+    const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob)
+  })
 }
 
 
@@ -81,7 +67,7 @@ function groupPredictions(predictions) {
 }
 
 const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-const BACKEND = isMobileDevice ? 'http://192.168.0.100:6767' : 'http://localhost:6767'
+const BACKEND = 'https://foodtrack.beast-inside.kz/cardio'
 
 function ImageModal({ src, predictions, onClose, t, lang }) {
   const [scale, setScale] = useState(1)
@@ -266,7 +252,7 @@ function ImageModal({ src, predictions, onClose, t, lang }) {
 const card = { border: '1px solid var(--c-border)', background: 'var(--c-card)', borderRadius: '16px' }
 const inputSt = { background: 'transparent', border: '1px solid var(--c-border)', borderRadius: '12px', color: 'var(--c-text)' }
 
-export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
+export default function ImageUpload({ anthropicKey }) {
   const { t, lang } = useLanguage()
   const [method, setMethod]     = useState('upload')
   const [format, setFormat]     = useState('image')
@@ -297,14 +283,6 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
     const f = e.dataTransfer.files[0]; if (f) { setFile(f); setErrorKey(null) }
   }
 
-  const buildUrl = (extra = '', fmt = format) => {
-    let u = `${ROBOFLOW_URL}/${model}/${version}?api_key=${apiKey}`
-    u += `&confidence=${confidence}&overlap=${overlap}&format=${fmt}`
-    if (fmt === 'image') { if (labels) u += '&labels=on'; u += `&stroke=${stroke}` }
-    if (extra) u += extra
-    return u
-  }
-
   const fetchAiReport = async (preds) => {
     if (!invoke || !anthropicKey || anthropicKey === 'YOUR_ANTHROPIC_API_KEY_HERE') return
     setAiReportLoading(true); setAiReport(null); setAiReportError(null)
@@ -324,33 +302,37 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
     setAiReport(null); setAiReportLoading(false); setAiReportError(null)
     setG4fSummary(null); setG4fLoading(false); setG4fError(null)
     try {
-      let body = ''
-      let extra = ''
+      let base64data = ''
       if (method === 'upload') {
         if (!file) { setErrorKey('errorSelectFile'); setLoading(false); return }
-        body = await resizeToDataUrl(file)
+        const dataUrl = await resizeToDataUrl(file)
+        base64data = dataUrl.split(',')[1]
       } else {
         if (!url) { setErrorKey('errorEnterUrl'); setLoading(false); return }
-        extra = `&image=${encodeURIComponent(url)}`
+        const resp = await fetch(url)
+        base64data = (await blobToDataUrl(await resp.blob())).split(',')[1]
       }
 
-      let preds = []
+      const params = `confidence=${confidence}&overlap=${overlap}&labels=${labels ? 'on' : 'off'}`
+      const body = JSON.stringify({ image: base64data })
+      const headers = { 'Content-Type': 'application/json' }
+
+      // Always fetch JSON predictions
+      const jsonResp = await fetch(`${BACKEND}/api/ecg/analyze?format=json&${params}`, { method: 'POST', headers, body })
+      if (!jsonResp.ok) throw new Error(`Server error ${jsonResp.status}`)
+      const jsonData = await jsonResp.json()
+      const preds = jsonData.predictions ?? []
+
       if (format === 'image') {
-        // Run image + JSON in parallel so we can show prediction count
-        const [imgResult, jsonResult] = await Promise.all([
-          roboflowPost(buildUrl(extra, 'image'), body, 'image'),
-          roboflowPost(buildUrl(extra, 'json'), body, 'json'),
-        ])
-        preds = jsonResult?.data?.predictions ?? []
-        setResult({ ...imgResult, count: preds.length, predictions: preds })
+        const imgResp = await fetch(`${BACKEND}/api/ecg/analyze?format=image&${params}`, { method: 'POST', headers, body })
+        const imgDataUrl = await blobToDataUrl(await imgResp.blob())
+        setResult({ type: 'image', data: imgDataUrl, count: preds.length, predictions: preds })
       } else {
-        const result = await roboflowPost(buildUrl(extra, 'json'), body, 'json')
-        preds = result?.data?.predictions ?? []
-        setResult({ ...result, count: preds.length, predictions: preds })
+        setResult({ type: 'json', data: jsonData, count: preds.length, predictions: preds })
       }
+
       setLoading(false)
       fetchAiReport(preds)
-      // Fetch G4F summary for main page
       if (preds.length > 0) {
         setG4fLoading(true)
         fetch(`${BACKEND}/api/ecg/summary`, {

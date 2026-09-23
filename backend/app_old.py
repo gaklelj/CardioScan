@@ -1,12 +1,8 @@
 import os
-import io
-import re
 import base64
 import logging
-import threading
 import numpy as np
 import requests
-from PIL import Image
 from flask import Flask, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -29,26 +25,14 @@ import tensorflow as tf
 
 _model_dir = os.environ.get('MODEL_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model'))
 MODEL_PATH = os.path.join(_model_dir, 'best_ecg_model.h5')
-_expected_len = 1000
+_model = tf.keras.models.load_model(MODEL_PATH)
+_expected_len = _model.input_shape[1]  # 1000
+log.info('Keras model loaded | input shape: %s', _model.input_shape)
 
-if os.path.exists(MODEL_PATH):
-    _model = tf.keras.models.load_model(MODEL_PATH)
-    _expected_len = _model.input_shape[1]
-    log.info('Keras model loaded | input shape: %s', _model.input_shape)
-    _dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
-    _model(_dummy, training=False)
-    log.info('Model warmed up')
-else:
-    _model = None
-    log.warning('Keras model not found at %s — /points inference disabled', MODEL_PATH)
-
-# ── YOLO model ────────────────────────────────────────────────────────────────
-from ultralytics import YOLO as _YOLO
-
-_YOLO_PATH = os.path.join(_model_dir, 'best.pt')
-_yolo_model = _YOLO(_YOLO_PATH)
-log.info('YOLO model loaded: %s', _YOLO_PATH)
-
+# Прогрев
+_dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
+_model(_dummy, training=False)
+log.info('Model warmed up')
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -61,13 +45,15 @@ def log_request():
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
+ROBOFLOW_API_KEY = os.getenv('ROBOFLOW_API_KEY', '')
+ROBOFLOW_PROJECT = os.getenv('ROBOFLOW_PROJECT', 'ecg.analyze')
+ROBOFLOW_VERSION = os.getenv('ROBOFLOW_VERSION', '5')
+
 ECG_CLASSES = ['Normal', 'Atrial Fibrillation', 'Other', 'Noise', 'ST-elevation', 'ST-depression']
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 def run_model(ecg_points: list) -> dict:
-    if _model is None:
-        raise RuntimeError('Keras model not available')
     arr = np.array(ecg_points, dtype=np.float32)
 
     mn, mx = arr.min(), arr.max()
@@ -92,84 +78,25 @@ def run_model(ecg_points: list) -> dict:
     }
 
 
-def _yolo_predict(img: Image.Image, confidence: float, overlap: float):
-    return _yolo_model.predict(source=img, conf=confidence, iou=overlap, imgsz=640, verbose=False)[0]
-
-
-def analyze_local_yolo(image_bytes: bytes, confidence: float = 0.20, fmt: str = 'json',
-                       overlap: float = 0.30, labels: bool = True):
-    img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-    img_w, img_h = img.size
-    log.info('Image: size=%s conf=%.2f', img.size, confidence)
-
-    # Stage 1: detect Plot regions
-    r1 = _yolo_predict(img, confidence=0.10, overlap=overlap)
-    plot_cls_id = next((k for k, v in r1.names.items() if v == 'Plot'), 0)
-    plots = [r1.boxes.xyxy[i].tolist() for i in range(len(r1.boxes))
-             if int(r1.boxes.cls[i].item()) == plot_cls_id]
-    log.info('Stage1: %d Plot regions found', len(plots))
-
-    # Stage 2: classify each Plot crop
-    predictions = []
-    for x1, y1, x2, y2 in plots:
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        crop = img.crop((x1, y1, x2, y2))
-        r2 = _yolo_predict(crop, confidence=confidence, overlap=overlap)
-        for j in range(len(r2.boxes)):
-            cls_id = int(r2.boxes.cls[j].item())
-            cls_name = r2.names.get(cls_id, f'class_{cls_id}')
-            if cls_name == 'Plot':
-                continue  # skip nested Plot detections
-            conf_val = float(r2.boxes.conf[j].item())
-            bx1, by1, bx2, by2 = r2.boxes.xyxy[j].tolist()
-            # Translate crop-relative coords back to full image
-            predictions.append({
-                'x': x1 + (bx1 + bx2) / 2,
-                'y': y1 + (by1 + by2) / 2,
-                'width': bx2 - bx1,
-                'height': by2 - by1,
-                'confidence': conf_val,
-                'class': re.sub(r'^[\s\-]+|[\s\-]+$', '', cls_name),
-            })
-
-    # If no medical classes found, fall back to Plot-level detections (lower conf)
-    if not predictions:
-        log.info('No medical classes in crops — trying direct low-conf pass')
-        r_direct = _yolo_predict(img, confidence=0.05, overlap=overlap)
-        for i in range(len(r_direct.boxes)):
-            cls_id = int(r_direct.boxes.cls[i].item())
-            cls_name = r_direct.names.get(cls_id, f'class_{cls_id}')
-            if cls_name == 'Plot':
-                continue
-            conf_val = float(r_direct.boxes.conf[i].item())
-            x1, y1, x2, y2 = r_direct.boxes.xyxy[i].tolist()
-            predictions.append({
-                'x': (x1 + x2) / 2,
-                'y': (y1 + y2) / 2,
-                'width': x2 - x1,
-                'height': y2 - y1,
-                'confidence': conf_val,
-                'class': re.sub(r'^[\s\-]+|[\s\-]+$', '', cls_name),
-            })
-
-    log.info('Final: %d medical predictions: %s', len(predictions), [p['class'] for p in predictions])
-
+def analyze_roboflow(image_bytes: bytes, confidence: int = 20, fmt: str = 'json',
+                     overlap: int = 30, labels: bool = True, stroke: int = 2):
+    url = (
+        f"https://detect.roboflow.com/{ROBOFLOW_PROJECT}/{ROBOFLOW_VERSION}"
+        f"?api_key={ROBOFLOW_API_KEY}&confidence={confidence}&overlap={overlap}&format={fmt}"
+    )
     if fmt == 'image':
-        # Draw boxes on original image
-        annotated = r1.plot()  # Stage1 annotated (shows Plot boxes)
-        annotated_rgb = annotated[:, :, ::-1]
-        pil_img = Image.fromarray(annotated_rgb)
-        buf = io.BytesIO()
-        pil_img.save(buf, format='JPEG')
-        return buf.getvalue(), 'image/jpeg'
-
-    return {'predictions': predictions, 'image': {'width': img_w, 'height': img_h}}, None
+        url += f'&labels={"on" if labels else "off"}&stroke={stroke}'
+    resp = requests.post(url, files={"file": image_bytes}, timeout=30)
+    resp.raise_for_status()
+    if fmt == 'image':
+        return resp.content, resp.headers.get('Content-Type', 'image/jpeg')
+    return resp.json(), None
 
 
 # ── REST API ──────────────────────────────────────────────────────────────────
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': 'best.pt', 'keras': _model is not None})
+    return jsonify({'status': 'ok', 'model': 'best_ecg_model.h5'})
 
 
 @app.route('/api/ecg/analyze', methods=['POST'])
@@ -193,13 +120,17 @@ def ecg_analyze():
         confidence = int(request.args.get('confidence', 20))
         overlap    = int(request.args.get('overlap', 30))
         labels     = request.args.get('labels', 'on') == 'on'
+        stroke     = int(request.args.get('stroke', 2))
 
-        data, content_type = analyze_local_yolo(image_bytes, confidence / 100, fmt, overlap / 100, labels)
+        data, content_type = analyze_roboflow(image_bytes, confidence, fmt, overlap, labels, stroke)
         if fmt == 'image':
             from flask import Response
             return Response(data, content_type=content_type)
         return jsonify(data)
 
+    except requests.RequestException as e:
+        log.error('Roboflow error: %s', e)
+        return jsonify({'error': 'Roboflow недоступен'}), 503
     except Exception as e:
         log.error('Analysis error: %s', e)
         return jsonify({'error': str(e)}), 500
@@ -229,43 +160,31 @@ def _is_relevant(text: str) -> bool:
     return len(text) >= 40
 
 # PollinationsAI OpenAI-compatible endpoint — free, no API key
-import time as _time
-_POLLINATIONS_MODELS = ['openai', 'openai-large']
-_ai_lock = threading.Lock()
+_POLLINATIONS_MODELS = ['mistral', 'openai', 'openai-large']
 
 def _call_g4f(messages: list) -> str:
-    with _ai_lock:
-        last_err = None
-        for attempt, model in enumerate(_POLLINATIONS_MODELS):
-            if attempt > 0:
-                _time.sleep(2)
-            try:
-                log.info('[AI] trying PollinationsAI model=%s', model)
-                resp = requests.post(
-                    'https://text.pollinations.ai/openai',
-                    json={'model': model, 'messages': messages},
-                    timeout=30,
-                )
-                if resp.status_code == 429:
-                    _time.sleep(3)
-                    resp = requests.post(
-                        'https://text.pollinations.ai/openai',
-                        json={'model': model, 'messages': messages},
-                        timeout=30,
-                    )
-                resp.raise_for_status()
-                data = resp.json()
-                text = data['choices'][0]['message']['content'] or ''
-                log.info('[AI] raw response model=%s:\n%s', model, text[:200])
-                cleaned = _clean_summary(text)
-                if _is_relevant(cleaned):
-                    log.info('[AI] accepted model=%s (%d chars)', model, len(cleaned))
-                    return cleaned
-                log.warning('[AI] model=%s response irrelevant or too short, skipping', model)
-            except Exception as e:
-                last_err = e
-                log.warning('[AI] model=%s failed: %s', model, e)
-        raise RuntimeError(f'All AI providers failed. Last error: {last_err}')
+    last_err = None
+    for model in _POLLINATIONS_MODELS:
+        try:
+            log.info('[AI] trying PollinationsAI model=%s', model)
+            resp = requests.post(
+                'https://text.pollinations.ai/openai',
+                json={'model': model, 'messages': messages},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data['choices'][0]['message']['content'] or ''
+            log.info('[AI] raw response model=%s:\n%s', model, text[:200])
+            cleaned = _clean_summary(text)
+            if _is_relevant(cleaned):
+                log.info('[AI] accepted model=%s (%d chars)', model, len(cleaned))
+                return cleaned
+            log.warning('[AI] model=%s response irrelevant or too short, skipping', model)
+        except Exception as e:
+            last_err = e
+            log.warning('[AI] model=%s failed: %s', model, e)
+    raise RuntimeError(f'All AI providers failed. Last error: {last_err}')
 
 
 @app.route('/api/ecg/summary', methods=['POST'])
