@@ -9,6 +9,8 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+venv11/
+venv*/
 *.egg-info/
 
 # Build output

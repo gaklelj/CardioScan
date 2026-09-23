@@ -3,8 +3,9 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const SOCKET_URL  = 'https://foodtrack.beast-inside.kz/cardio'
-const ANALYZE_URL = `${SOCKET_URL}/api/ecg/analyze`
+const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
+const SOCKET_URL  = isMobileDevice ? 'https://foodtrack.beast-inside.kz/cardio' : 'http://localhost:6767'
+const ANALYZE_URL = isMobileDevice ? 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze' : 'http://localhost:6767/api/ecg/analyze'
 const MAX_POINTS  = 500
 const CANVAS_W    = 800
 const CANVAS_H    = 200
