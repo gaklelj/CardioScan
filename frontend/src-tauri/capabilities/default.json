@@ -5,7 +5,11 @@
   "windows": [
     "main"
   ],
+  "platforms": ["linux", "windows", "macOS"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:allow-execute",
+    "shell:allow-kill",
+    "shell:allow-stdin-write"
   ]
 }

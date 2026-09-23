@@ -46,6 +46,9 @@ const translations = {
     tabRealtime: 'Real-Time ECG',
     tabUpload: 'Upload Image',
     tabLive: 'Live Capture',
+    tabRealtimeShort: 'Real-Time',
+    tabUploadShort: 'Upload',
+    tabLiveShort: 'Live',
     analyzerFooter: 'For informational use only. Not a substitute for professional medical advice.',
 
     /* EcgRealtime */
@@ -171,6 +174,7 @@ const translations = {
     aiReportDisclaimer: 'For informational purposes only. Consult a physician.',
     g4fSummaryTitle: 'Summary & Recommendations',
     g4fSummaryError: 'Could not generate summary.',
+    tapToZoom: 'Tap to zoom',
 
     /* LiveCapture */
     liveInfo: 'The Flask server captures your screen, sends frames to Roboflow, draws bounding boxes, and streams the result here via WebSocket.',
@@ -225,6 +229,9 @@ const translations = {
     tabRealtime: 'ЭКГ в реальном времени',
     tabUpload: 'Загрузить изображение',
     tabLive: 'Захват экрана',
+    tabRealtimeShort: 'ЭКГ',
+    tabUploadShort: 'Фото',
+    tabLiveShort: 'Камера',
     analyzerFooter: 'Только для информационных целей. Не заменяет профессиональную медицинскую консультацию.',
 
     deviceStatus: 'Состояние устройства',
@@ -343,6 +350,7 @@ const translations = {
     aiReportDisclaimer: 'Только для информационных целей. Проконсультируйтесь с врачом.',
     g4fSummaryTitle: 'Сводка и рекомендации',
     g4fSummaryError: 'Не удалось составить сводку.',
+    tapToZoom: 'Нажми для просмотра',
 
     liveInfo: 'Сервер Flask захватывает ваш экран, отправляет кадры в Roboflow, рисует рамки и передаёт результат сюда через WebSocket.',
     liveFps: '~5 fps · ограничено задержкой API',
@@ -396,6 +404,9 @@ const translations = {
     tabRealtime: 'Нақты уақытта ЭКГ',
     tabUpload: 'Суретті жүктеу',
     tabLive: 'Тікелей жазу',
+    tabRealtimeShort: 'ЭКГ',
+    tabUploadShort: 'Фото',
+    tabLiveShort: 'Камера',
     analyzerFooter: 'Тек ақпараттық мақсатта. Кәсіби медициналық кеңестің орнын алмастырмайды.',
 
     deviceStatus: 'Құрылғы күйі',
@@ -514,6 +525,7 @@ const translations = {
     aiReportDisclaimer: 'Тек ақпараттық мақсатта. Дәрігермен кеңесіңіз.',
     g4fSummaryTitle: 'Қысқаша сводка және ұсыныстар',
     g4fSummaryError: 'Сводканы жасау мүмкін болмады.',
+    tapToZoom: 'Үлкейту үшін басыңыз',
 
     liveInfo: 'Flask сервері экраныңызды жазады, кадрлерді Roboflow-ге жібереді, жолақтар салады және нәтижені WebSocket арқылы осыға жіберіп отырады.',
     liveFps: '~5 fps · API кідіруімен шектелген',

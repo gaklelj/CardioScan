@@ -7,8 +7,6 @@ from flask import Flask, send_from_directory, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from dotenv import load_dotenv
-from g4f.client import Client as G4FClient
-
 load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -25,7 +23,8 @@ logging.getLogger('socketio').setLevel(logging.WARNING)
 # ── Keras model ───────────────────────────────────────────────────────────────
 import tensorflow as tf
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'best_ecg_model.h5')
+_model_dir = os.environ.get('MODEL_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model'))
+MODEL_PATH = os.path.join(_model_dir, 'best_ecg_model.h5')
 _model = tf.keras.models.load_model(MODEL_PATH)
 _expected_len = _model.input_shape[1]  # 1000
 log.info('Keras model loaded | input shape: %s', _model.input_shape)
@@ -137,18 +136,15 @@ def ecg_analyze():
         return jsonify({'error': str(e)}), 500
 
 
-# ── G4F Summary ───────────────────────────────────────────────────────────────
+# ── AI Summary (direct PollinationsAI — no g4f dependency) ────────────────────
 import re as _re
-
-_g4f_client = G4FClient()
+import json as _json
 
 _SPAM_RE = _re.compile(
     r'(https?://\S+|Need\s+prox|cheaper\s+than|visit\s+our|click\s+here|'
     r'buy\s+now|subscribe|discord\.gg|t\.me/|telegram|promo\s+code)',
     _re.IGNORECASE,
 )
-
-# Признаки нерелевантного ответа (провайдер вернул мусор вместо медицины)
 _IRRELEVANT_RE = _re.compile(
     r'^(hello|hi\b|hey\b|how are you|i\'m doing|thank you|how about you)',
     _re.IGNORECASE,
@@ -161,44 +157,34 @@ def _clean_summary(text: str) -> str:
 def _is_relevant(text: str) -> bool:
     if _IRRELEVANT_RE.match(text.strip()):
         return False
-    if len(text) < 40:
-        return False
-    return True
+    return len(text) >= 40
 
-
-# (provider_name or None for auto, model)
-_G4F_PROVIDERS = [
-    ('PollinationsAI', 'mistral'),
-    ('PollinationsAI', 'openai'),
-    (None,             'gpt-4o-mini'),
-]
+# PollinationsAI OpenAI-compatible endpoint — free, no API key
+_POLLINATIONS_MODELS = ['mistral', 'openai', 'openai-large']
 
 def _call_g4f(messages: list) -> str:
-    import g4f.Provider as _P
     last_err = None
-    for provider_name, model in _G4F_PROVIDERS:
+    for model in _POLLINATIONS_MODELS:
         try:
-            label = provider_name or 'auto'
-            log.info('[G4F] trying provider=%s model=%s', label, model)
-            kwargs = {'model': model, 'messages': messages}
-            if provider_name:
-                provider = getattr(_P, provider_name, None)
-                if provider is None:
-                    log.warning('[G4F] provider %s not found in g4f, skipping', provider_name)
-                    continue
-                kwargs['provider'] = provider
-            resp = _g4f_client.chat.completions.create(**kwargs)
-            text = resp.choices[0].message.content or ''
-            log.info('[G4F] raw response from %s:\n%s', label, text)
+            log.info('[AI] trying PollinationsAI model=%s', model)
+            resp = requests.post(
+                'https://text.pollinations.ai/openai',
+                json={'model': model, 'messages': messages},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data['choices'][0]['message']['content'] or ''
+            log.info('[AI] raw response model=%s:\n%s', model, text[:200])
             cleaned = _clean_summary(text)
-            log.info('[G4F] cleaned (%d chars): %s', len(cleaned), cleaned[:120])
             if _is_relevant(cleaned):
+                log.info('[AI] accepted model=%s (%d chars)', model, len(cleaned))
                 return cleaned
-            log.warning('[G4F] %s: response irrelevant or too short, skipping', label)
+            log.warning('[AI] model=%s response irrelevant or too short, skipping', model)
         except Exception as e:
             last_err = e
-            log.warning('[G4F] provider %s failed: %s', label, e)
-    raise RuntimeError(f'All G4F providers failed. Last error: {last_err}')
+            log.warning('[AI] model=%s failed: %s', model, e)
+    raise RuntimeError(f'All AI providers failed. Last error: {last_err}')
 
 
 @app.route('/api/ecg/summary', methods=['POST'])
