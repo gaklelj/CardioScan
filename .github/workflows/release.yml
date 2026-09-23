@@ -121,13 +121,77 @@ jobs:
             **Linux** — `chmod +x *.AppImage && ./*.AppImage`
             **iOS** — через AltStore, Sideloadly или Apple Configurator 2
             **Android** — включи «Установку из неизвестных источников» и открой APK
-
-            ---
-
-            ### Возможности
-            - **ЭКГ в реальном времени** — canvas, Keras AI (6 классов), автоанализ каждые 1000 точек
-            - **Анализ фото ЭКГ** — Roboflow CV, зум-модалка, карточки находок, AI-сводка
-            - **G4F сводка** — работает на Windows без установки Python (встроенный бэкенд)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  build-android:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          sdkmanager "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> $GITHUB_ENV
+
+      - name: Create Android placeholder binaries
+        run: |
+          mkdir -p frontend/src-tauri/binaries
+          touch frontend/src-tauri/binaries/backend-aarch64-linux-android
+          touch frontend/src-tauri/binaries/backend-armv7-linux-androideabi
+          touch frontend/src-tauri/binaries/backend-i686-linux-android
+          touch frontend/src-tauri/binaries/backend-x86_64-linux-android
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Initialize Android project
+        working-directory: frontend
+        run: npx tauri android init
+
+      - name: Build Android APK
+        working-directory: frontend
+        run: npx tauri android build --apk
+
+      - name: Sign APK
+        run: |
+          APKSIGNER=$(ls $ANDROID_SDK_ROOT/build-tools/*/apksigner | sort -V | tail -1)
+          APK_IN="frontend/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          APK_OUT="CardioScan-Android-arm64.apk"
+          keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -storepass android -keypass android 2>/dev/null || true
+          "$APKSIGNER" sign \
+            --ks debug.keystore \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$APK_OUT" "$APK_IN"
+
+      - name: Upload Android APK to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} CardioScan-Android-arm64.apk --clobber

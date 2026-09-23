@@ -80,8 +80,8 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
-const BACKEND = isIOS ? 'http://192.168.0.100:6767' : 'http://localhost:6767'
+const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+const BACKEND = isMobileDevice ? 'http://192.168.0.100:6767' : 'http://localhost:6767'
 
 function ImageModal({ src, predictions, onClose, t, lang }) {
   const [scale, setScale] = useState(1)

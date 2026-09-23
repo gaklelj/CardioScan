@@ -38,10 +38,7 @@
     ],
     "externalBin": [
       "binaries/backend"
-    ],
-    "resources": {
-      "model/**/*": "model/"
-    }
+    ]
   },
   "plugins": {
     "shell": {

@@ -32,7 +32,7 @@ function EcgStrip() {
 export default function Analyzer() {
   const [tab, setTab] = useState('realtime')
   const { t } = useLanguage()
-  const { isIOS } = usePlatform()
+  const { isMobile } = usePlatform()
 
   const tabs = [
     { v: 'realtime', label: t('tabRealtime'), short: t('tabRealtimeShort'), Icon: Activity },
@@ -40,7 +40,7 @@ export default function Analyzer() {
     { v: 'live',     label: t('tabLive'),     short: t('tabLiveShort'),     Icon: Monitor },
   ]
 
-  if (isIOS) {
+  if (isMobile) {
     return (
       <div className="ios-page">
         <div className="ios-large-title-header" style={{ borderBottom: '0.5px solid var(--ios-separator)' }}>
