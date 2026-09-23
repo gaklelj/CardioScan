@@ -68,7 +68,7 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
-const BACKEND = 'https://foodtrack.beast-inside.kz/cardio'
+const BACKEND = 'http://localhost:6767'
 
 function ImageModal({ src, predictions, onClose, t, lang }) {
   const [scale, setScale] = useState(1)
@@ -278,9 +278,34 @@ export default function ImageUpload({ anthropicKey }) {
   const [hoverImg, setHoverImg]     = useState(false)
   const [showSymptoms, setShowSymptoms] = useState(false)
   const [symptoms, setSymptoms]         = useState(null)
-  const [riskData]                       = useState(null)
+  const [riskData, setRiskData]         = useState(null)
   const [riskLoading, setRiskLoading]   = useState(false)
   const fileRef = useRef(null)
+
+  // Fetch risk assessment when both symptoms + predictions are available
+  useEffect(() => {
+    if (!symptoms?.demographics || !result?.predictions?.length) return
+    setRiskLoading(true)
+    // Build ECG probabilities from YOLO predictions (class → max confidence)
+    const ecg = {}
+    for (const p of result.predictions) {
+      const cls = p.class
+      if (!ecg[cls] || p.confidence > ecg[cls]) ecg[cls] = p.confidence
+    }
+    fetch(`${BACKEND}/api/risk-assessment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ecg_probabilities: ecg,
+        demographics: symptoms.demographics,
+        rose_flag: symptoms.roseFlag ?? 0,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.risk_class) setRiskData(data); else setRiskLoading(false) })
+      .catch(() => setRiskLoading(false))
+      .finally(() => setRiskLoading(false))
+  }, [symptoms, result]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
   const handleDrop = (e) => {

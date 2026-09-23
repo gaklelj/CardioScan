@@ -216,6 +216,66 @@ def ecg_analyze():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Meta Risk Model ──────────────────────────────────────────────────────────
+from meta_risk_model import predict_risk as _predict_risk, MODEL_PATH as _META_MODEL_PATH
+
+if os.path.exists(_META_MODEL_PATH):
+    log.info('Meta risk model found: %s', _META_MODEL_PATH)
+else:
+    log.warning('Meta risk model not found at %s — /api/risk-assessment disabled', _META_MODEL_PATH)
+
+# ECG_CLASSES mapping: backend class names → meta-model prob fields
+_ECG_TO_PROB = {'NORM': 'prob_norm', 'STTC': 'prob_sttc', 'MI': 'prob_mi', 'HYP': 'prob_hyp', 'CD': 'prob_cd'}
+
+
+@app.route('/api/risk-assessment', methods=['POST'])
+def risk_assessment():
+    try:
+        body = request.get_json(silent=True) or {}
+
+        # ECG probabilities — from ЭКГ neural network output
+        ecg = body.get('ecg_probabilities', {})
+        prob_norm = float(ecg.get('prob_norm', ecg.get('NORM', 0)))
+        prob_sttc = float(ecg.get('prob_sttc', ecg.get('STTC', 0)))
+        prob_mi   = float(ecg.get('prob_mi',   ecg.get('MI',   0)))
+        prob_hyp  = float(ecg.get('prob_hyp',  ecg.get('HYP',  0)))
+        prob_cd   = float(ecg.get('prob_cd',   ecg.get('CD',   0)))
+
+        # Normalize to sum=1.0 (NOISE class excluded)
+        ecg_sum = prob_norm + prob_sttc + prob_mi + prob_hyp + prob_cd
+        if ecg_sum > 0:
+            prob_norm /= ecg_sum
+            prob_sttc /= ecg_sum
+            prob_mi   /= ecg_sum
+            prob_hyp  /= ecg_sum
+            prob_cd   /= ecg_sum
+
+        # Demographics
+        demo = body.get('demographics', {})
+        age         = int(demo.get('age', 45))
+        sex         = int(demo.get('sex', 0))
+        sbp         = float(demo.get('sbp', 120))
+        cholesterol = float(demo.get('cholesterol', 5.0))
+        smoking     = int(demo.get('smoking', 0))
+
+        # Rose questionnaire
+        rose_flag = int(body.get('rose_flag', 0))
+
+        result = _predict_risk(
+            prob_norm=prob_norm, prob_sttc=prob_sttc, prob_mi=prob_mi,
+            prob_hyp=prob_hyp, prob_cd=prob_cd,
+            age=age, sex=sex, sbp=sbp, cholesterol=cholesterol,
+            smoking=smoking, rose_flag=rose_flag,
+        )
+
+        log.info('Risk assessment: %s (mortality %.1f%%)', result['risk_class'], result['mortality_10y'])
+        return jsonify(result)
+
+    except Exception as e:
+        log.error('Risk assessment error: %s', e)
+        return jsonify({'error': str(e)}), 500
+
+
 # ── AI Summary (direct PollinationsAI — no g4f dependency) ────────────────────
 import re as _re
 import json as _json
