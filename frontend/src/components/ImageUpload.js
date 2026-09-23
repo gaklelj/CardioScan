@@ -89,31 +89,43 @@ function ImageModal({ src, predictions, onClose, t, lang }) {
   const [g4fError, setG4fError] = useState(null)
   const touch = useRef({ dist: 0, scale: 1 })
 
+  // iOS-compatible scroll lock: position:fixed approach
+  useEffect(() => {
+    const scrollY = window.scrollY
+    const body = document.body
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.overflow = 'hidden'
+    return () => {
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.overflow = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
+
   useEffect(() => {
     if (predictions.length === 0) return
     setG4fLoading(true)
-    setG4fSummary(null)
-    setG4fError(null)
     fetch(`${BACKEND}/api/ecg/summary`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ predictions, lang }),
     })
       .then(r => r.json())
-      .then(data => {
-        if (data.summary) setG4fSummary(data.summary)
-        else setG4fError(true)
-      })
+      .then(data => { if (data.summary) setG4fSummary(data.summary); else setG4fError(true) })
       .catch(() => setG4fError(true))
       .finally(() => setG4fLoading(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const clamp = (s) => Math.min(5, Math.max(1, s))
+
+  const clamp = (s) => Math.min(5, Math.max(0.5, s))
   const groups = groupPredictions(predictions)
 
-  const onWheel = (e) => {
-    e.preventDefault()
-    setScale(s => clamp(s * (e.deltaY > 0 ? 0.9 : 1.1)))
-  }
+  const onWheel = (e) => { e.preventDefault(); setScale(s => clamp(s * (e.deltaY > 0 ? 0.9 : 1.1))) }
   const onTouchStart = (e) => {
     if (e.touches.length === 2) {
       touch.current.dist  = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
@@ -129,168 +141,122 @@ function ImageModal({ src, predictions, onClose, t, lang }) {
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', flexDirection: 'column' }}
-    >
-      {/* Header — safe area aware */}
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-          paddingBottom: '12px', paddingLeft: '16px', paddingRight: '16px',
-          background: 'rgba(10,10,10,0.95)',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          flexShrink: 0,
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <div>
-          <p style={{ fontSize: '15px', fontWeight: 600, color: '#fff', margin: 0 }}>{t('reportTitle')}</p>
-          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: 0, marginTop: '2px' }}>
-            {predictions.length > 0 ? `${predictions.length} ${t('detectedN').toLowerCase()} ${groups.length} ${t('reportClasses')}` : t('noneDetected')}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#0a0a0a', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)',
+        paddingBottom: '10px', paddingLeft: '16px', paddingRight: '12px',
+        background: 'rgba(10,10,10,0.96)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        backdropFilter: 'blur(16px)',
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: '15px', fontWeight: 600, color: '#fff', margin: 0, lineHeight: 1.3 }}>{t('reportTitle')}</p>
+          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.38)', margin: 0, marginTop: '2px' }}>
+            {predictions.length > 0
+              ? `${predictions.length} ${t('detectedN').toLowerCase()} · ${groups.length} ${t('reportClasses')}`
+              : t('noneDetected')}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <button onClick={() => setScale(s => clamp(s * 1.3))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomIn size={17} /></button>
-          <button onClick={() => setScale(s => clamp(s * 0.77))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomOut size={17} /></button>
-          <button onClick={() => setScale(1)} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><RotateCcw size={16} /></button>
-          <button
-            onClick={onClose}
-            style={{ color: '#fff', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.12)', marginLeft: '4px' }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0, marginLeft: '8px' }}>
+          <button onClick={() => setScale(s => clamp(s * 1.3))} style={{ color: 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'transparent', border: 'none' }}><ZoomIn size={17} /></button>
+          <button onClick={() => setScale(s => clamp(s * 0.75))} style={{ color: 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'transparent', border: 'none' }}><ZoomOut size={17} /></button>
+          <button onClick={() => setScale(1)} style={{ color: 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'transparent', border: 'none' }}><RotateCcw size={15} /></button>
+          <button onClick={onClose} style={{ color: '#fff', cursor: 'pointer', padding: '8px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: 'none', marginLeft: '4px', display: 'flex', alignItems: 'center' }}>
             <X size={17} />
           </button>
         </div>
       </div>
 
-      {/* Image — zoomable & scrollable */}
+      {/* Single unified scroll — image + findings + summary all in one flow */}
       <div
-        onClick={e => e.stopPropagation()}
+        style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
         onWheel={onWheel}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
-        style={{ flex: 1, overflow: 'auto', padding: '12px', background: '#0a0a0a' }}
       >
-        <img
-          src={src}
-          alt="ECG result"
-          draggable={false}
-          style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '12px', userSelect: 'none' }}
-        />
-      </div>
+        {/* Image */}
+        <div style={{ background: '#060606', padding: '12px 12px 0' }}>
+          <img
+            src={src}
+            alt="ECG result"
+            draggable={false}
+            style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '10px', userSelect: 'none' }}
+          />
+        </div>
 
-      {/* Findings panel */}
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'rgba(10,10,10,0.97)',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-          paddingTop: '14px', paddingLeft: '16px', paddingRight: '16px',
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)',
-          flexShrink: 0, maxHeight: '38vh', overflowY: 'auto',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <p style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>
-          {t('reportFindings')}
-        </p>
+        {/* Findings + summary */}
+        <div style={{
+          padding: '16px 16px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+          background: '#0a0a0a',
+        }}>
+          {groups.length === 0 ? (
+            <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '20px 0', margin: 0 }}>{t('noneDetected')}</p>
+          ) : (
+            <>
+              <p style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '12px', marginTop: 0 }}>
+                {t('reportFindings')}
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                {groups.map((g) => {
+                  const color = classColor(g.cls)
+                  return (
+                    <div key={g.cls} style={{
+                      borderRadius: '12px', padding: '12px',
+                      background: `${color}12`, border: `1px solid ${color}35`,
+                      display: 'flex', flexDirection: 'column', gap: '7px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color, lineHeight: 1.25, flex: 1 }}>{g.cls}</span>
+                        {g.count > 1 && (
+                          <span style={{ fontSize: '11px', fontWeight: 700, color, background: `${color}22`, borderRadius: '20px', padding: '2px 7px', flexShrink: 0 }}>×{g.count}</span>
+                        )}
+                      </div>
+                      <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(g.max * 100).toFixed(0)}%`, background: color, borderRadius: '2px' }} />
+                      </div>
+                      <span style={{ fontSize: '11px', fontFamily: 'monospace', color: `${color}aa` }}>max {(g.max * 100).toFixed(1)}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
 
-        {groups.length === 0 ? (
-          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '12px 0' }}>{t('noneDetected')}</p>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
-            {groups.map((g) => {
-              const color = classColor(g.cls)
-              return (
-                <div
-                  key={g.cls}
-                  style={{
-                    borderRadius: '12px',
-                    padding: '10px 12px',
-                    background: `${color}14`,
-                    border: `1px solid ${color}40`,
-                    display: 'flex', flexDirection: 'column', gap: '6px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color, lineHeight: 1.2, flex: 1 }}>{g.cls}</span>
-                    {g.count > 1 && (
-                      <span style={{
-                        fontSize: '10px', fontWeight: 700, color,
-                        background: `${color}25`, borderRadius: '20px',
-                        padding: '1px 6px', flexShrink: 0,
-                      }}>×{g.count}</span>
-                    )}
-                  </div>
-                  {/* Confidence bar */}
-                  <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${(g.max * 100).toFixed(0)}%`, background: color, borderRadius: '2px' }} />
-                  </div>
-                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: `${color}cc` }}>
-                    max {(g.max * 100).toFixed(1)}%
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* G4F Summary */}
-        {(g4fLoading || g4fSummary || g4fError) && (
-          <div style={{
-            marginTop: '12px',
-            borderRadius: '12px',
-            border: '1px solid rgba(34,197,94,0.2)',
-            background: 'rgba(34,197,94,0.05)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '7px',
-              padding: '8px 12px',
-              borderBottom: '1px solid rgba(34,197,94,0.12)',
-              background: 'rgba(34,197,94,0.07)',
-            }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="rgba(34,197,94,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                {t('g4fSummaryTitle')}
-              </span>
-              {g4fLoading && (
-                <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
-                  <circle cx="12" cy="12" r="10" stroke="rgba(34,197,94,0.25)" strokeWidth="3"/>
-                  <path d="M4 12a8 8 0 018-8" stroke="rgba(34,197,94,0.8)" strokeWidth="3" strokeLinecap="round"/>
+          {/* G4F Summary */}
+          {(g4fLoading || g4fSummary || g4fError) && (
+            <div style={{ borderRadius: '12px', border: '1px solid rgba(34,197,94,0.18)', background: 'rgba(34,197,94,0.04)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 12px', borderBottom: '1px solid rgba(34,197,94,0.1)', background: 'rgba(34,197,94,0.06)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="rgba(34,197,94,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              )}
+                <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(34,197,94,0.85)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {t('g4fSummaryTitle')}
+                </span>
+                {g4fLoading && (
+                  <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" stroke="rgba(34,197,94,0.2)" strokeWidth="3"/>
+                    <path d="M4 12a8 8 0 018-8" stroke="rgba(34,197,94,0.75)" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                )}
+              </div>
+              <div style={{ padding: '11px 12px' }}>
+                {g4fLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {[90, 70, 55].map((w, i) => (
+                      <div key={i} style={{ height: '9px', borderRadius: '5px', width: `${w}%`, background: 'linear-gradient(90deg, rgba(34,197,94,0.08) 25%, rgba(34,197,94,0.2) 50%, rgba(34,197,94,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.6s infinite' }} />
+                    ))}
+                  </div>
+                )}
+                {g4fSummary && <p style={{ fontSize: '13px', lineHeight: '1.65', color: 'rgba(255,255,255,0.78)', margin: 0, whiteSpace: 'pre-wrap' }}>{g4fSummary}</p>}
+                {g4fError && <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', margin: 0 }}>{t('g4fSummaryError')}</p>}
+              </div>
             </div>
-            <div style={{ padding: '10px 12px' }}>
-              {g4fLoading && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {[90, 70, 55].map((w, i) => (
-                    <div key={i} style={{
-                      height: '9px', borderRadius: '5px', width: `${w}%`,
-                      background: 'linear-gradient(90deg, rgba(34,197,94,0.1) 25%, rgba(34,197,94,0.22) 50%, rgba(34,197,94,0.1) 75%)',
-                      backgroundSize: '200% 100%',
-                      animation: 'shimmer 1.6s infinite',
-                    }} />
-                  ))}
-                </div>
-              )}
-              {g4fSummary && (
-                <p style={{ fontSize: '12px', lineHeight: '1.65', color: 'rgba(255,255,255,0.8)', margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {g4fSummary}
-                </p>
-              )}
-              {g4fError && (
-                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', margin: 0 }}>
-                  {t('g4fSummaryError')}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
@@ -318,6 +284,10 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
   const [aiReport, setAiReport]           = useState(null)
   const [aiReportLoading, setAiReportLoading] = useState(false)
   const [aiReportError, setAiReportError]   = useState(null)
+  const [g4fSummary, setG4fSummary] = useState(null)
+  const [g4fLoading, setG4fLoading] = useState(false)
+  const [g4fError, setG4fError]     = useState(null)
+  const [hoverImg, setHoverImg]     = useState(false)
   const fileRef = useRef(null)
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
@@ -351,6 +321,7 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
     e.preventDefault()
     setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
     setAiReport(null); setAiReportLoading(false); setAiReportError(null)
+    setG4fSummary(null); setG4fLoading(false); setG4fError(null)
     try {
       let body = ''
       let extra = ''
@@ -378,6 +349,19 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
       }
       setLoading(false)
       fetchAiReport(preds)
+      // Fetch G4F summary for main page
+      if (preds.length > 0) {
+        setG4fLoading(true)
+        fetch(`${BACKEND}/api/ecg/summary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predictions: preds, lang }),
+        })
+          .then(r => r.json())
+          .then(data => { if (data.summary) setG4fSummary(data.summary); else setG4fError(true) })
+          .catch(() => setG4fError(true))
+          .finally(() => setG4fLoading(false))
+      }
     } catch (err) {
       setErrorKey('errorInference')
       setErrorDetail(String(err?.message || err))
@@ -557,11 +541,41 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
           </div>
           <div className="p-4 space-y-3">
             {result.type === 'image' ? (
-              <img
-                src={result.data} alt="Inference result"
-                className="w-full rounded-xl cursor-zoom-in"
+              <div
+                style={{ position: 'relative', cursor: 'zoom-in', borderRadius: '12px', overflow: 'hidden' }}
                 onClick={() => setModal(true)}
-              />
+                onMouseEnter={() => setHoverImg(true)}
+                onMouseLeave={() => setHoverImg(false)}
+              >
+                <img src={result.data} alt="Inference result" className="w-full" style={{ display: 'block', pointerEvents: 'none' }} />
+                {/* Hover overlay */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: hoverImg ? 'rgba(0,0,0,0.38)' : 'rgba(0,0,0,0)',
+                  transition: 'background 0.18s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  pointerEvents: 'none',
+                }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.18)', borderRadius: '50%', padding: '12px',
+                    opacity: hoverImg ? 1 : 0, transform: hoverImg ? 'scale(1)' : 'scale(0.75)',
+                    transition: 'opacity 0.18s, transform 0.18s',
+                  }}>
+                    <ZoomIn size={26} color="white" />
+                  </div>
+                </div>
+                {/* Always-visible mobile hint badge */}
+                <div style={{
+                  position: 'absolute', bottom: 10, right: 10,
+                  background: 'rgba(0,0,0,0.52)', borderRadius: '8px', padding: '5px 8px',
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  backdropFilter: 'blur(6px)', pointerEvents: 'none',
+                  opacity: hoverImg ? 0 : 0.82, transition: 'opacity 0.18s',
+                }}>
+                  <ZoomIn size={12} color="white" />
+                  <span style={{ fontSize: '10px', color: 'white', fontWeight: 500 }}>{t('tapToZoom')}</span>
+                </div>
+              </div>
             ) : (
               <pre className="text-xs overflow-auto max-h-80 font-mono leading-relaxed" style={{ color: 'var(--c-muted)' }}>
                 {JSON.stringify(result.data, null, 2)}
@@ -579,6 +593,72 @@ export default function ImageUpload({ apiKey, model, version, anthropicKey }) {
                 {result.count > 0
                   ? `${t('detectedN')} ${result.count}`
                   : t('noneDetected')}
+              </div>
+            )}
+
+            {/* Findings chips */}
+            {result.predictions && result.predictions.length > 0 && (() => {
+              const groups = groupPredictions(result.predictions)
+              return (
+                <div>
+                  <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--c-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>
+                    {t('reportFindings')}
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '7px' }}>
+                    {groups.map((g) => {
+                      const color = classColor(g.cls)
+                      return (
+                        <div key={g.cls} style={{
+                          borderRadius: '10px', padding: '9px 10px',
+                          background: `${color}12`, border: `1px solid ${color}35`,
+                          display: 'flex', flexDirection: 'column', gap: '5px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color, lineHeight: 1.2, flex: 1 }}>{g.cls}</span>
+                            {g.count > 1 && (
+                              <span style={{ fontSize: '10px', fontWeight: 700, color, background: `${color}22`, borderRadius: '20px', padding: '1px 5px', flexShrink: 0 }}>×{g.count}</span>
+                            )}
+                          </div>
+                          <div style={{ height: '3px', borderRadius: '2px', background: 'var(--c-border)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(g.max * 100).toFixed(0)}%`, background: color, borderRadius: '2px' }} />
+                          </div>
+                          <span style={{ fontSize: '10px', fontFamily: 'monospace', color: `${color}bb` }}>max {(g.max * 100).toFixed(1)}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* G4F Summary on main page */}
+            {(g4fLoading || g4fSummary || g4fError) && (
+              <div style={{ borderRadius: '12px', border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 12px', borderBottom: '1px solid rgba(34,197,94,0.1)', background: 'rgba(34,197,94,0.06)' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke="rgba(34,197,94,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                    {t('g4fSummaryTitle')}
+                  </span>
+                  {g4fLoading && (
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10" stroke="rgba(34,197,94,0.25)" strokeWidth="3"/>
+                      <path d="M4 12a8 8 0 018-8" stroke="rgba(34,197,94,0.8)" strokeWidth="3" strokeLinecap="round"/>
+                    </svg>
+                  )}
+                </div>
+                <div style={{ padding: '10px 12px' }}>
+                  {g4fLoading && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {[90, 70, 55].map((w, i) => (
+                        <div key={i} style={{ height: '9px', borderRadius: '5px', width: `${w}%`, background: 'linear-gradient(90deg, rgba(34,197,94,0.1) 25%, rgba(34,197,94,0.22) 50%, rgba(34,197,94,0.1) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.6s infinite' }} />
+                      ))}
+                    </div>
+                  )}
+                  {g4fSummary && <p style={{ fontSize: '12px', lineHeight: '1.65', color: 'var(--c-muted)', margin: 0, whiteSpace: 'pre-wrap' }}>{g4fSummary}</p>}
+                  {g4fError && <p style={{ fontSize: '12px', color: 'var(--c-dim)', margin: 0 }}>{t('g4fSummaryError')}</p>}
+                </div>
               </div>
             )}
 

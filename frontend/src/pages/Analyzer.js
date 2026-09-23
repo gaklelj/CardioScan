@@ -57,7 +57,7 @@ export default function Analyzer() {
               <button key={v} onClick={() => setTab(v)} style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 gap: 5, padding: '8px 4px', borderRadius: 8, border: 'none',
-                fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                fontSize: 'clamp(10px, 3.2vw, 13px)', fontWeight: 500, cursor: 'pointer',
                 background: tab === v ? 'var(--ios-bg-secondary)' : 'transparent',
                 color: tab === v ? 'var(--ios-text-primary)' : 'var(--ios-text-secondary)',
                 WebkitTapHighlightColor: 'transparent',
@@ -105,15 +105,16 @@ export default function Analyzer() {
             <button
               key={v}
               onClick={() => setTab(v)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all cursor-pointer min-w-0"
-              style={
-                tab === v
+              className="flex-1 flex items-center justify-center gap-1 py-2.5 rounded-lg font-medium transition-all cursor-pointer min-w-0"
+              style={{
+                fontSize: 'clamp(9.5px, 2.4vw, 13px)',
+                ...(tab === v
                   ? { background: 'var(--c-hover)', color: 'var(--c-text)' }
-                  : { color: 'var(--c-dim)' }
-              }
+                  : { color: 'var(--c-dim)' })
+              }}
             >
-              <Icon size={12} className="shrink-0" />
-              <span className="truncate">{label}</span>
+              <Icon size={12} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
             </button>
           ))}
         </div>

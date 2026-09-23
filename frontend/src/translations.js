@@ -171,6 +171,7 @@ const translations = {
     aiReportDisclaimer: 'For informational purposes only. Consult a physician.',
     g4fSummaryTitle: 'Summary & Recommendations',
     g4fSummaryError: 'Could not generate summary.',
+    tapToZoom: 'Tap to zoom',
 
     /* LiveCapture */
     liveInfo: 'The Flask server captures your screen, sends frames to Roboflow, draws bounding boxes, and streams the result here via WebSocket.',
@@ -343,6 +344,7 @@ const translations = {
     aiReportDisclaimer: 'Только для информационных целей. Проконсультируйтесь с врачом.',
     g4fSummaryTitle: 'Сводка и рекомендации',
     g4fSummaryError: 'Не удалось составить сводку.',
+    tapToZoom: 'Нажми для просмотра',
 
     liveInfo: 'Сервер Flask захватывает ваш экран, отправляет кадры в Roboflow, рисует рамки и передаёт результат сюда через WebSocket.',
     liveFps: '~5 fps · ограничено задержкой API',
@@ -514,6 +516,7 @@ const translations = {
     aiReportDisclaimer: 'Тек ақпараттық мақсатта. Дәрігермен кеңесіңіз.',
     g4fSummaryTitle: 'Қысқаша сводка және ұсыныстар',
     g4fSummaryError: 'Сводканы жасау мүмкін болмады.',
+    tapToZoom: 'Үлкейту үшін басыңыз',
 
     liveInfo: 'Flask сервері экраныңызды жазады, кадрлерді Roboflow-ге жібереді, жолақтар салады және нәтижені WebSocket арқылы осыға жіберіп отырады.',
     liveFps: '~5 fps · API кідіруімен шектелген',
