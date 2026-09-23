@@ -54,7 +54,7 @@ export default function ImageUpload({ apiKey, model, version }) {
   const [format, setFormat]     = useState('image')
   const [file, setFile]         = useState(null)
   const [url, setUrl]           = useState('')
-  const [confidence, setConf]   = useState(40)
+  const [confidence, setConf]   = useState(20)
   const [overlap, setOverlap]   = useState(30)
   const [labels, setLabels]     = useState(true)
   const [stroke, setStroke]     = useState(2)
