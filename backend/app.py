@@ -280,6 +280,93 @@ def ecg_summary():
         return jsonify({'error': str(e)}), 500
 
 
+# ── Serial / Bluetooth ECG device ─────────────────────────────────────────────
+import serial
+import serial.tools.list_ports
+import threading
+
+_serial_thread = None
+_serial_running = False
+_serial_port    = None
+
+ECG_KEYWORDS = ['ESP32', 'CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'Bluetooth']
+
+def _find_ecg_port():
+    """Найти порт ESP32 (USB или Bluetooth Serial)."""
+    ports = serial.tools.list_ports.comports()
+    for p in ports:
+        desc = f'{p.description} {p.hwid} {p.name}'
+        if any(k.lower() in desc.lower() for k in ECG_KEYWORDS):
+            return p.device
+    # fallback: первый доступный порт
+    return ports[0].device if ports else None
+
+def _serial_reader(port_name, baud=115200):
+    global _serial_running, _serial_port, ecg_buffer
+    try:
+        _serial_port = serial.Serial(port_name, baud, timeout=1)
+        log.info('Serial opened: %s @ %d', port_name, baud)
+        socketio.emit('device_status', {'connected': True, 'port': port_name})
+        while _serial_running:
+            try:
+                line = _serial_port.readline().decode('utf-8', errors='ignore').strip()
+                if not line:
+                    continue
+                value = int(line)
+                socketio.emit('ecg_point', {'value': value})
+                ecg_buffer.append(value)
+                if len(ecg_buffer) >= BUFFER_SIZE:
+                    try:
+                        result = run_model(ecg_buffer[-BUFFER_SIZE:])
+                        socketio.emit('ecg_analysis', result)
+                        log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
+                    except Exception as e:
+                        log.error('Live analysis error: %s', e)
+                    ecg_buffer = []
+            except (ValueError, UnicodeDecodeError):
+                pass
+            except Exception as e:
+                log.error('Serial read error: %s', e)
+                break
+    except Exception as e:
+        log.error('Cannot open serial %s: %s', port_name, e)
+        socketio.emit('device_status', {'connected': False, 'error': str(e)})
+    finally:
+        if _serial_port and _serial_port.is_open:
+            _serial_port.close()
+        socketio.emit('device_status', {'connected': False})
+        log.info('Serial closed')
+
+
+@socketio.on('check_ecg_device')
+def handle_check_device():
+    port = _find_ecg_port()
+    if port:
+        emit('device_status', {'connected': True, 'port': port})
+    else:
+        emit('device_status', {'connected': False})
+
+
+@socketio.on('start_ecg')
+def handle_start_ecg():
+    global _serial_thread, _serial_running
+    if _serial_thread and _serial_thread.is_alive():
+        return
+    port = _find_ecg_port()
+    if not port:
+        emit('device_status', {'connected': False})
+        return
+    _serial_running = True
+    _serial_thread = threading.Thread(target=_serial_reader, args=(port,), daemon=True)
+    _serial_thread.start()
+
+
+@socketio.on('stop_ecg')
+def handle_stop_ecg():
+    global _serial_running
+    _serial_running = False
+
+
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
 ecg_buffer = []
 BUFFER_SIZE = _expected_len
