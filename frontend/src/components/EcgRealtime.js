@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
+import SymptomsModal, { SymptomsCard } from './SymptomsModal'
 
 const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
 // Десктоп → локальный бэкенд (он и читает USB/WiFi сам)
@@ -51,6 +52,8 @@ export default function EcgRealtime() {
     try { return JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]').length } catch { return 0 }
   })
   const [flushStatus, setFlushStatus] = useState('idle')
+  const [showSymptoms, setShowSymptoms] = useState(false)
+  const [symptoms, setSymptoms]         = useState(null)
 
   const canvasRef     = useRef(null)
   const socketRef     = useRef(null)
@@ -177,6 +180,7 @@ export default function EcgRealtime() {
     dataBufferRef.current = []
     setSampleCount(0); setDuration(0); setHeartRate(null)
     setAiResult(null); setAiStatus('idle')
+    setSymptoms(null); setShowSymptoms(true)
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
     socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
@@ -360,6 +364,11 @@ export default function EcgRealtime() {
         )}
       </div>
 
+      {/* Симптомы пациента */}
+      {symptoms && symptoms.length > 0 && (
+        <SymptomsCard symptoms={symptoms} t={t} />
+      )}
+
       {/* Результат AI */}
       {(aiStatus === 'analyzing' || aiStatus === 'done' || aiStatus === 'error') && (
         <div className="border rounded-2xl overflow-hidden animate-fade-in"
@@ -423,6 +432,13 @@ export default function EcgRealtime() {
           </div>
         </div>
       )}
+
+      <SymptomsModal
+        open={showSymptoms && scanStatus === 'scanning'}
+        onClose={() => setShowSymptoms(false)}
+        onSubmit={(answers) => setSymptoms(answers)}
+        t={t}
+      />
 
     </div>
   )

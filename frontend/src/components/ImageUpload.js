@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
+import SymptomsModal, { SymptomsCard } from './SymptomsModal'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
@@ -276,6 +277,8 @@ export default function ImageUpload({ anthropicKey }) {
   const [g4fLoading, setG4fLoading] = useState(false)
   const [g4fError, setG4fError]     = useState(null)
   const [hoverImg, setHoverImg]     = useState(false)
+  const [showSymptoms, setShowSymptoms] = useState(false)
+  const [symptoms, setSymptoms]         = useState(null)
   const fileRef = useRef(null)
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
@@ -302,6 +305,7 @@ export default function ImageUpload({ anthropicKey }) {
     setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
     setAiReport(null); setAiReportLoading(false); setAiReportError(null)
     setG4fSummary(null); setG4fLoading(false); setG4fError(null)
+    setSymptoms(null); setShowSymptoms(true)
     try {
       let base64data = ''
       if (method === 'upload') {
@@ -517,6 +521,11 @@ export default function ImageUpload({ anthropicKey }) {
         </div>
       )}
 
+      {/* Симптомы пациента */}
+      {symptoms && symptoms.length > 0 && (
+        <SymptomsCard symptoms={symptoms} t={t} />
+      )}
+
       {/* Result */}
       {result && (
         <div className="border rounded-2xl overflow-hidden animate-fade-in" style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
@@ -722,6 +731,13 @@ export default function ImageUpload({ anthropicKey }) {
           </div>
         </div>
       )}
+
+      <SymptomsModal
+        open={showSymptoms && loading}
+        onClose={() => setShowSymptoms(false)}
+        onSubmit={(answers) => setSymptoms(answers)}
+        t={t}
+      />
 
       {modal && result?.type === 'image' && (
         <ImageModal
