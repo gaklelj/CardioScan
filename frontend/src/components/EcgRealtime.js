@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
+import RiskAssessmentCard from './RiskAssessmentCard'
 
 const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
 // Десктоп → локальный бэкенд (он и читает USB/WiFi сам)
@@ -54,6 +55,8 @@ export default function EcgRealtime() {
   const [flushStatus, setFlushStatus] = useState('idle')
   const [showSymptoms, setShowSymptoms] = useState(false)
   const [symptoms, setSymptoms]         = useState(null)
+  const [riskData, setRiskData]         = useState(null)
+  const [riskLoading, setRiskLoading]   = useState(false)
 
   const canvasRef     = useRef(null)
   const socketRef     = useRef(null)
@@ -181,6 +184,7 @@ export default function EcgRealtime() {
     setSampleCount(0); setDuration(0); setHeartRate(null)
     setAiResult(null); setAiStatus('idle')
     setSymptoms(null); setShowSymptoms(true)
+    setRiskData(null); setRiskLoading(false)
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
     socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
@@ -365,9 +369,12 @@ export default function EcgRealtime() {
       </div>
 
       {/* Симптомы пациента */}
-      {symptoms && symptoms.length > 0 && (
-        <SymptomsCard symptoms={symptoms} t={t} />
+      {symptoms?.readable?.length > 0 && (
+        <SymptomsCard symptoms={symptoms.readable} t={t} />
       )}
+
+      {/* Оценка кардиологического риска */}
+      <RiskAssessmentCard riskData={riskData} loading={riskLoading} t={t} />
 
       {/* Результат AI */}
       {(aiStatus === 'analyzing' || aiStatus === 'done' || aiStatus === 'error') && (
@@ -434,9 +441,12 @@ export default function EcgRealtime() {
       )}
 
       <SymptomsModal
-        open={showSymptoms && scanStatus === 'scanning'}
+        open={showSymptoms}
         onClose={() => setShowSymptoms(false)}
-        onSubmit={(answers) => setSymptoms(answers)}
+        onSubmit={(data) => {
+          setSymptoms(data)
+          if (data.demographics) setRiskLoading(true)
+        }}
         t={t}
       />
 

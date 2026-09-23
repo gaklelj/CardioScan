@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
+import RiskAssessmentCard from './RiskAssessmentCard'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
@@ -67,8 +68,6 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
-// eslint-disable-next-line no-unused-vars
-const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 const BACKEND = 'https://foodtrack.beast-inside.kz/cardio'
 
 function ImageModal({ src, predictions, onClose, t, lang }) {
@@ -279,6 +278,8 @@ export default function ImageUpload({ anthropicKey }) {
   const [hoverImg, setHoverImg]     = useState(false)
   const [showSymptoms, setShowSymptoms] = useState(false)
   const [symptoms, setSymptoms]         = useState(null)
+  const [riskData]                       = useState(null)
+  const [riskLoading, setRiskLoading]   = useState(false)
   const fileRef = useRef(null)
 
   const handleFileChange = (e) => { const f = e.target.files[0]; if (f) { setFile(f); setErrorKey(null) } }
@@ -522,9 +523,12 @@ export default function ImageUpload({ anthropicKey }) {
       )}
 
       {/* Симптомы пациента */}
-      {symptoms && symptoms.length > 0 && (
-        <SymptomsCard symptoms={symptoms} t={t} />
+      {symptoms?.readable?.length > 0 && (
+        <SymptomsCard symptoms={symptoms.readable} t={t} />
       )}
+
+      {/* Оценка кардиологического риска */}
+      <RiskAssessmentCard riskData={riskData} loading={riskLoading} t={t} />
 
       {/* Result */}
       {result && (
@@ -733,9 +737,12 @@ export default function ImageUpload({ anthropicKey }) {
       )}
 
       <SymptomsModal
-        open={showSymptoms && loading}
+        open={showSymptoms}
         onClose={() => setShowSymptoms(false)}
-        onSubmit={(answers) => setSymptoms(answers)}
+        onSubmit={(data) => {
+          setSymptoms(data)
+          if (data.demographics) setRiskLoading(true)
+        }}
         t={t}
       />
 

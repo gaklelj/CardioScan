@@ -205,6 +205,15 @@ const translations = {
     sq6opt1: 'Yes', sq6opt2: 'No',
     sqBack: 'Back', sqNext: 'Next', sqDone: 'Submit', sqSkip: 'Skip questionnaire',
     sqSymptomsCard: 'Patient Symptoms',
+    sqDemoTitle: 'Patient Data', sqPhaseDemo: 'Step 1 of 2', sqPhaseRose: 'Step 2 of 2',
+    sqAge: 'Age', sqAgeUnit: 'years',
+    sqSex: 'Sex', sqSexF: 'Female', sqSexM: 'Male',
+    sqSbp: 'Systolic BP', sqSbpUnit: 'mmHg',
+    sqCholesterol: 'Cholesterol', sqCholUnit: 'mmol/L',
+    sqSmoking: 'Smoking', sqSmokingNo: 'Non-smoker', sqSmokingYes: 'Smoker',
+    riskTitle: 'Cardiac Risk', riskMortality: '10-year mortality',
+    riskLow: 'Low', riskModerate: 'Moderate', riskHigh: 'High', riskCritical: 'Critical',
+    riskPending: 'Risk analysis in progress…',
   },
 
   ru: {
@@ -397,6 +406,15 @@ const translations = {
     sq6opt1: 'Да', sq6opt2: 'Нет',
     sqBack: 'Назад', sqNext: 'Далее', sqDone: 'Отправить', sqSkip: 'Пропустить анкету',
     sqSymptomsCard: 'Симптомы пациента',
+    sqDemoTitle: 'Данные пациента', sqPhaseDemo: 'Шаг 1 из 2', sqPhaseRose: 'Шаг 2 из 2',
+    sqAge: 'Возраст', sqAgeUnit: 'лет',
+    sqSex: 'Пол', sqSexF: 'Женщина', sqSexM: 'Мужчина',
+    sqSbp: 'АД систолическое', sqSbpUnit: 'мм рт.ст.',
+    sqCholesterol: 'Холестерин', sqCholUnit: 'ммоль/л',
+    sqSmoking: 'Курение', sqSmokingNo: 'Не курю', sqSmokingYes: 'Курю',
+    riskTitle: 'Кардиологический риск', riskMortality: '10-летняя смертность',
+    riskLow: 'Низкий', riskModerate: 'Умеренный', riskHigh: 'Высокий', riskCritical: 'Критический',
+    riskPending: 'Анализ риска выполняется…',
   },
 
   kz: {
@@ -589,6 +607,15 @@ const translations = {
     sq6opt1: 'Иә', sq6opt2: 'Жоқ',
     sqBack: 'Артқа', sqNext: 'Келесі', sqDone: 'Жіберу', sqSkip: 'Анкетаны өткізіп жіберу',
     sqSymptomsCard: 'Науқас симптомдары',
+    sqDemoTitle: 'Науқас деректері', sqPhaseDemo: '1/2 қадам', sqPhaseRose: '2/2 қадам',
+    sqAge: 'Жасы', sqAgeUnit: 'жас',
+    sqSex: 'Жынысы', sqSexF: 'Әйел', sqSexM: 'Ер',
+    sqSbp: 'Систолалық қысым', sqSbpUnit: 'мм сын.бағ.',
+    sqCholesterol: 'Холестерин', sqCholUnit: 'ммоль/л',
+    sqSmoking: 'Темекі', sqSmokingNo: 'Темекі шекпеймін', sqSmokingYes: 'Темекі шегемін',
+    riskTitle: 'Кардиологиялық қауіп', riskMortality: '10 жылдық өлім-жітім',
+    riskLow: 'Төмен', riskModerate: 'Орташа', riskHigh: 'Жоғары', riskCritical: 'Критикалық',
+    riskPending: 'Қауіп талдауы жүргізілуде…',
   },
 }
 
