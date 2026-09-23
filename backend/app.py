@@ -71,7 +71,7 @@ def log_request():
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-ECG_CLASSES = ['Normal', 'Atrial Fibrillation', 'Other', 'Noise', 'ST-elevation', 'ST-depression']
+ECG_CLASSES = ['CD', 'HYP', 'MI', 'NORM', 'STTC', 'NOISE']
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
