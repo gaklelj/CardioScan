@@ -58,6 +58,26 @@ export default function EcgRealtime() {
   const [riskData, setRiskData]         = useState(null)
   const [riskLoading, setRiskLoading]   = useState(false)
 
+  // Fetch risk assessment when both symptoms + ECG result are available
+  useEffect(() => {
+    if (!symptoms?.demographics || !aiResult?.all) return
+    setRiskLoading(true)
+    const ecg = aiResult.all
+    fetch(`${BACKEND}/api/risk-assessment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ecg_probabilities: ecg,
+        demographics: symptoms.demographics,
+        rose_flag: symptoms.roseFlag ?? 0,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data.risk_class) setRiskData(data); else setRiskLoading(false) })
+      .catch(() => setRiskLoading(false))
+      .finally(() => setRiskLoading(false))
+  }, [symptoms, aiResult])
+
   const canvasRef     = useRef(null)
   const socketRef     = useRef(null)
   const dataBufferRef = useRef([])
