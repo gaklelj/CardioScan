@@ -3,8 +3,9 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const BACKEND     = 'https://foodtrack.beast-inside.kz'
-const ANALYZE_URL = 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
+const IS_TAURI    = Boolean(window.__TAURI__)
+const BACKEND     = IS_TAURI ? 'http://localhost:6767' : 'https://foodtrack.beast-inside.kz'
+const ANALYZE_URL = IS_TAURI ? 'http://localhost:6767/api/ecg/analyze' : 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
 const ESP32_WS    = 'ws://192.168.4.1:81'
 const OFFLINE_KEY = 'ecg_offline_buffer'
 const MAX_POINTS  = 500
@@ -111,19 +112,30 @@ export default function EcgRealtime() {
     animFrameRef.current = requestAnimationFrame(drawChart)
   }, [])
 
-  /* ─── Backend socket (только для inference) ─────────────────────── */
+  /* ─── Backend socket ────────────────────────────────────────────── */
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io(BACKEND, { path: '/cardio/socket.io', transports: ['polling'] })
+    const socketOpts = IS_TAURI
+      ? { transports: ['websocket'] }
+      : { path: '/cardio/socket.io', transports: ['polling'] }
+    const socket = io(BACKEND, socketOpts)
     socketRef.current = socket
 
     socket.on('connect',    () => setServerOnline(true))
     socket.on('disconnect', () => setServerOnline(false))
-    // Бэкенд шлёт ecg_analysis каждые 1000 точек автоматически
     socket.on('ecg_analysis', (data) => { setAiResult(data); setAiStatus('done') })
+    // В Tauri: Flask читает serial и шлёт точки сам
+    socket.on('ecg_point',  (data) => { if (IS_TAURI) pushValue(data.value) })
+    socket.on('device_status', (data) => {
+      if (IS_TAURI) {
+        setDeviceConnected(data.connected)
+        if (data.connected) setDeviceInfo(data)
+        else setDeviceInfo(null)
+      }
+    })
 
     const onOnline  = () => setIsOnline(true)
     const onOffline = () => setIsOnline(false)
@@ -260,8 +272,14 @@ export default function EcgRealtime() {
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
     timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
 
-    if (connModeRef.current === 'wifi') startWiFi()
-    else await startSerial()
+    if (connModeRef.current === 'wifi') {
+      startWiFi()
+    } else if (IS_TAURI) {
+      // В Tauri: Flask читает serial, точки приходят через socket
+      socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
+    } else {
+      await startSerial()
+    }
   }
 
   const stopScan = async () => {
@@ -269,6 +287,7 @@ export default function EcgRealtime() {
     setScanStatus('done'); scanStatusRef.current = 'done'
 
     if (connModeRef.current === 'wifi') stopWiFi()
+    else if (IS_TAURI) socketRef.current?.emit('stop_ecg')
     else await stopSerial()
 
     analyzePoints(dataBufferRef.current)
