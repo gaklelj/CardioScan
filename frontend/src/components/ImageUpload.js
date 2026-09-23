@@ -68,7 +68,7 @@ function groupPredictions(predictions) {
     .sort((a, b) => b.max - a.max)
 }
 
-const BACKEND = 'https://foodtrack.beast-inside.kz/cardio'
+const BACKEND = 'http://localhost:6767'
 
 function ImageModal({ src, predictions, onClose, t, lang }) {
   const [scale, setScale] = useState(1)

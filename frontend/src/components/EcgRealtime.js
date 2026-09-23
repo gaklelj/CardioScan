@@ -9,11 +9,11 @@ const isMobileDevice = /Android|iPhone|iPad/i.test(navigator.userAgent)
 // Десктоп → локальный бэкенд (он и читает USB/WiFi сам)
 // Мобайл  → VPS
 const BACKEND     = isMobileDevice
-  ? 'https://foodtrack.beast-inside.kz'
+  ? 'http://localhost:6767'
   : 'http://localhost:6767'
-const SOCKET_PATH = isMobileDevice ? '/cardio/socket.io' : '/socket.io'
+const SOCKET_PATH = isMobileDevice ? '/socket.io' : '/socket.io'
 const ANALYZE_URL = isMobileDevice
-  ? 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
+  ? 'http://localhost:6767/api/ecg/analyze'
   : 'http://localhost:6767/api/ecg/analyze'
 const OFFLINE_KEY = 'ecg_offline_buffer'
 const MAX_POINTS  = 500
