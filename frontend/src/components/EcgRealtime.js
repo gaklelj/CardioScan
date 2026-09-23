@@ -3,7 +3,6 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const SOCKET_URL  = 'https://foodtrack.beast-inside.kz/cardio'
 const ANALYZE_URL = 'https://foodtrack.beast-inside.kz/cardio/api/ecg/analyze'
 const MAX_POINTS  = 500
 const CANVAS_W    = 800
@@ -122,7 +121,7 @@ export default function EcgRealtime() {
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io(SOCKET_URL, { transports: ['websocket'] })
+    const socket = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['websocket'] })
     socketRef.current = socket
 
     socket.on('connect', () => {

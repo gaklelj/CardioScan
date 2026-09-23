@@ -3,7 +3,6 @@ import { io } from 'socket.io-client'
 import { Play, Square, Info } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const SOCKET_URL = 'https://foodtrack.beast-inside.kz/cardio'
 
 export default function LiveCapture() {
   const { t } = useLanguage()
@@ -13,7 +12,7 @@ export default function LiveCapture() {
   const socketRef = useRef(null)
 
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL, { transports: ['websocket'] })
+    socketRef.current = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['websocket'] })
     socketRef.current.on('frame', (data) => {
       setFrame('data:image/jpeg;base64,' + data.image)
       setFrameCount((n) => n + 1)
