@@ -53,7 +53,7 @@ log.info('YOLO model loaded: %s', _YOLO_PATH)
 # ── App ───────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'fallback-dev-key')
-CORS(app)
+CORS(app, origins='*', supports_credentials=False)
 
 @app.before_request
 def log_request():
