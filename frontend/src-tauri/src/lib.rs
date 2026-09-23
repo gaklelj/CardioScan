@@ -56,11 +56,9 @@ fn read_serial_data(state: tauri::State<SerialState>) -> Result<String, String> 
     }
 }
 
-// Native HTTP proxy for iOS/Android — bypasses WKWebView fetch restrictions
-#[cfg(any(target_os = "android", target_os = "ios"))]
+// Native HTTP proxy — bypasses WebView fetch/CORS restrictions on all platforms
 use base64::Engine as _;
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
 #[tauri::command]
 async fn roboflow_infer(url: String, body: String) -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
@@ -119,6 +117,7 @@ pub fn run() {
             connect_serial,
             disconnect_serial,
             read_serial_data,
+            roboflow_infer,
         ]);
 
     #[cfg(any(target_os = "android", target_os = "ios"))]

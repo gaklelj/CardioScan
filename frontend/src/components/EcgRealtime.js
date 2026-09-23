@@ -3,13 +3,20 @@ import { io } from 'socket.io-client'
 import { Play, Square, Activity, Cpu } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
-const SOCKET_URL = 'http://127.0.0.1:5001'
+const SOCKET_URL  = 'https://foodtrack.beast-inside.kz/cardio'
+const ANALYZE_URL = `${SOCKET_URL}/api/ecg/analyze`
 const MAX_POINTS  = 500
 const CANVAS_W    = 800
 const CANVAS_H    = 200
-const API_KEY     = 'WapH9HvnhmB00awLAv3N'
-const MODEL       = 'ecg.analyze'
-const VERSION     = '5'
+
+const CLASS_COLORS = {
+  'Normal':              '#22c55e',
+  'Atrial Fibrillation': '#f97316',
+  'ST-elevation':        '#ef4444',
+  'ST-depression':       '#f59e0b',
+  'Other':               '#a78bfa',
+  'Noise':               '#6b7280',
+}
 
 export default function EcgRealtime() {
   const { t } = useLanguage()
@@ -90,19 +97,19 @@ export default function EcgRealtime() {
     animFrameRef.current = requestAnimationFrame(drawChart)
   }, [])
 
-  /* ─── Capture canvas → Roboflow AI ─────────────────────────────── */
-  const captureAndAnalyze = useCallback(async () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+  /* ─── Send points → backend Keras model ────────────────────────── */
+  const analyzePoints = useCallback(async (points) => {
+    if (!points.length) return
     setAiStatus('analyzing')
     try {
-      const dataUrl = canvas.toDataURL('image/jpeg', 1.0)
-      const res = await fetch(
-        `https://detect.roboflow.com/${MODEL}/${VERSION}?api_key=${API_KEY}&format=image&labels=on&stroke=2`,
-        { method: 'POST', body: dataUrl }
-      )
-      const blob = await res.blob()
-      setAiResult(URL.createObjectURL(blob))
+      const res = await fetch(ANALYZE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setAiResult(data)
       setAiStatus('done')
     } catch {
       setAiStatus('error')
@@ -132,10 +139,15 @@ export default function EcgRealtime() {
       setSampleCount(n => n + 1)
       if (data.heart_rate) setHeartRate(data.heart_rate)
     })
+    socket.on('ecg_analysis', (data) => {
+      // Keras model auto-fires every 1000 points
+      setAiResult(data)
+      setAiStatus('done')
+    })
     socket.on('ecg_scan_done', () => {
       clearInterval(timerRef.current)
       setScanStatus('done'); scanStatusRef.current = 'done'
-      captureAndAnalyze()
+      analyzePoints(dataBufferRef.current)
     })
 
     return () => {
@@ -144,7 +156,7 @@ export default function EcgRealtime() {
       socket.emit('stop_ecg')
       socket.disconnect()
     }
-  }, [drawChart, captureAndAnalyze])
+  }, [drawChart, analyzePoints])
 
   /* ─── Controls ──────────────────────────────────────────────────── */
   const startScan = () => {
@@ -160,7 +172,7 @@ export default function EcgRealtime() {
     clearInterval(timerRef.current)
     socketRef.current?.emit('stop_ecg')
     setScanStatus('done'); scanStatusRef.current = 'done'
-    captureAndAnalyze()
+    analyzePoints(dataBufferRef.current)
   }
 
   const canStart = serverOnline && deviceConnected && scanStatus !== 'scanning'
@@ -327,7 +339,44 @@ export default function EcgRealtime() {
               </div>
             )}
             {aiStatus === 'done' && aiResult && (
-              <img src={aiResult} alt="AI analysis" className="w-full rounded-xl" />
+              <div className="space-y-3">
+                {/* Main diagnosis */}
+                <div
+                  className="flex items-center justify-between px-4 py-3 rounded-xl"
+                  style={{
+                    background: `${CLASS_COLORS[aiResult.class] ?? '#6b7280'}18`,
+                    border: `1px solid ${CLASS_COLORS[aiResult.class] ?? '#6b7280'}44`,
+                  }}
+                >
+                  <span className="font-semibold text-sm" style={{ color: CLASS_COLORS[aiResult.class] ?? 'var(--c-text)' }}>
+                    {aiResult.class}
+                  </span>
+                  <span className="text-sm font-mono font-medium" style={{ color: CLASS_COLORS[aiResult.class] ?? 'var(--c-text)' }}>
+                    {(aiResult.confidence * 100).toFixed(1)}%
+                  </span>
+                </div>
+                {/* All classes */}
+                {aiResult.all && (
+                  <div className="space-y-1.5">
+                    {Object.entries(aiResult.all)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([cls, conf]) => (
+                        <div key={cls} className="flex items-center gap-2">
+                          <span className="text-xs w-36 shrink-0 truncate" style={{ color: 'var(--c-dim)' }}>{cls}</span>
+                          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'var(--c-border)' }}>
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${(conf * 100).toFixed(1)}%`, background: CLASS_COLORS[cls] ?? '#6b7280' }}
+                            />
+                          </div>
+                          <span className="text-xs font-mono w-10 text-right shrink-0" style={{ color: 'var(--c-dim)' }}>
+                            {(conf * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             )}
             {aiStatus === 'error' && (
               <p className="text-sm text-center py-4" style={{ color: 'var(--c-warn-text)' }}>

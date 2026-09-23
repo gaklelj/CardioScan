@@ -1,19 +1,43 @@
 import { useState, useRef } from 'react'
-import { UploadCloud, Link as LinkIcon, ImageIcon, Code2 } from 'lucide-react'
+import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 
 const ROBOFLOW_URL = 'https://detect.roboflow.com'
 
 const invoke = window.__TAURI__?.core?.invoke ?? window.__TAURI_INTERNALS__?.invoke
 
+// Resize image to max 1280px before sending — large photos (5-15MB) exceed
+// Android Tauri IPC limit and cause silent failures
+async function resizeToDataUrl(file, maxSide = 1280) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = reject
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onerror = reject
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.88))
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 async function roboflowPost(url, body, format) {
   if (invoke) {
-    // Native path — bypasses WKWebView fetch restrictions on iOS
+    // Native Rust path — bypasses WebView CORS/fetch restrictions on all Tauri platforms
     const result = await invoke('roboflow_infer', { url, body })
     return result
   }
-  // Web path
-  const res = await fetch(url, { method: 'POST', body })
+  // Web path — plain browser (no Tauri)
+  const res = await fetch(url, { method: 'POST', body, headers: { 'Content-Type': 'text/plain' } })
   if (format === 'image') {
     const blob = await res.blob()
     const dataUrl = await new Promise((resolve) => {
@@ -24,25 +48,173 @@ async function roboflowPost(url, body, format) {
   return { type: 'json', data: await res.json() }
 }
 
-function resizeImage(base64Str) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.src = base64Str
-    img.onload = () => {
-      const MAX = 1500
-      let { width, height } = img
-      if (width > height) {
-        if (width > MAX) { height *= MAX / width; width = MAX }
-      } else {
-        if (height > MAX) { width *= MAX / height; height = MAX }
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-      resolve(canvas.toDataURL('image/jpeg', 1.0))
+
+// Assign a stable color to any class name
+const PALETTE = ['#ef4444','#f97316','#f59e0b','#22c55e','#60a5fa','#a78bfa','#ec4899','#14b8a6']
+function classColor(cls) {
+  const c = (cls || '').toUpperCase()
+  if (c.includes('NORMAL'))                       return '#22c55e'
+  if (c.includes('ST-E') || c.includes('STE'))    return '#ef4444'
+  if (c.includes('ST-D') || c.includes('STD'))    return '#f59e0b'
+  if (c.includes('ST'))                           return '#f97316'
+  if (c.includes('AF') || c.includes('FIBR'))     return '#f97316'
+  if (c.startsWith('T'))                          return '#f59e0b'
+  if (c.startsWith('P'))                          return '#60a5fa'
+  if (c.includes('QRS') || c.startsWith('Q'))     return '#a78bfa'
+  if (c.includes('NOISE'))                        return '#6b7280'
+  let h = 0; for (const ch of cls) h = (h * 31 + ch.charCodeAt(0)) & 0xFFFF
+  return PALETTE[h % PALETTE.length]
+}
+
+// Group predictions by class → { class, count, avgConf, maxConf }
+function groupPredictions(predictions) {
+  const map = {}
+  for (const p of predictions) {
+    if (!map[p.class]) map[p.class] = { cls: p.class, count: 0, total: 0, max: 0 }
+    map[p.class].count++
+    map[p.class].total += p.confidence
+    map[p.class].max = Math.max(map[p.class].max, p.confidence)
+  }
+  return Object.values(map)
+    .map(g => ({ ...g, avg: g.total / g.count }))
+    .sort((a, b) => b.max - a.max)
+}
+
+function ImageModal({ src, predictions, onClose, t }) {
+  const [scale, setScale] = useState(1)
+  const touch = useRef({ dist: 0, scale: 1 })
+  const clamp = (s) => Math.min(5, Math.max(1, s))
+  const groups = groupPredictions(predictions)
+
+  const onWheel = (e) => {
+    e.preventDefault()
+    setScale(s => clamp(s * (e.deltaY > 0 ? 0.9 : 1.1)))
+  }
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      touch.current.dist  = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      touch.current.scale = scale
     }
-  })
+  }
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      setScale(clamp(touch.current.scale * dist / touch.current.dist))
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: '#000', display: 'flex', flexDirection: 'column' }}
+    >
+      {/* Header — safe area aware */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          paddingBottom: '12px', paddingLeft: '16px', paddingRight: '16px',
+          background: 'rgba(10,10,10,0.95)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          flexShrink: 0,
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <div>
+          <p style={{ fontSize: '15px', fontWeight: 600, color: '#fff', margin: 0 }}>{t('reportTitle')}</p>
+          <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: 0, marginTop: '2px' }}>
+            {predictions.length > 0 ? `${predictions.length} ${t('detectedN').toLowerCase()} ${groups.length} ${t('reportClasses')}` : t('noneDetected')}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button onClick={() => setScale(s => clamp(s * 1.3))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomIn size={17} /></button>
+          <button onClick={() => setScale(s => clamp(s * 0.77))} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><ZoomOut size={17} /></button>
+          <button onClick={() => setScale(1)} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '8px', borderRadius: '8px' }}><RotateCcw size={16} /></button>
+          <button
+            onClick={onClose}
+            style={{ color: '#fff', cursor: 'pointer', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.12)', marginLeft: '4px' }}
+          >
+            <X size={17} />
+          </button>
+        </div>
+      </div>
+
+      {/* Image — zoomable & scrollable */}
+      <div
+        onClick={e => e.stopPropagation()}
+        onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        style={{ flex: 1, overflow: 'auto', padding: '12px', background: '#0a0a0a' }}
+      >
+        <img
+          src={src}
+          alt="ECG result"
+          draggable={false}
+          style={{ width: `calc(100% * ${scale})`, display: 'block', borderRadius: '12px', userSelect: 'none' }}
+        />
+      </div>
+
+      {/* Findings panel */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'rgba(10,10,10,0.97)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingTop: '14px', paddingLeft: '16px', paddingRight: '16px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)',
+          flexShrink: 0, maxHeight: '38vh', overflowY: 'auto',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <p style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>
+          {t('reportFindings')}
+        </p>
+
+        {groups.length === 0 ? (
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '12px 0' }}>{t('noneDetected')}</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
+            {groups.map((g) => {
+              const color = classColor(g.cls)
+              return (
+                <div
+                  key={g.cls}
+                  style={{
+                    borderRadius: '12px',
+                    padding: '10px 12px',
+                    background: `${color}14`,
+                    border: `1px solid ${color}40`,
+                    display: 'flex', flexDirection: 'column', gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color, lineHeight: 1.2, flex: 1 }}>{g.cls}</span>
+                    {g.count > 1 && (
+                      <span style={{
+                        fontSize: '10px', fontWeight: 700, color,
+                        background: `${color}25`, borderRadius: '20px',
+                        padding: '1px 6px', flexShrink: 0,
+                      }}>×{g.count}</span>
+                    )}
+                  </div>
+                  {/* Confidence bar */}
+                  <div style={{ height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${(g.max * 100).toFixed(0)}%`, background: color, borderRadius: '2px' }} />
+                  </div>
+                  <span style={{ fontSize: '11px', fontFamily: 'monospace', color: `${color}cc` }}>
+                    max {(g.max * 100).toFixed(1)}%
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 const card = { border: '1px solid var(--c-border)', background: 'var(--c-card)', borderRadius: '16px' }
@@ -59,8 +231,10 @@ export default function ImageUpload({ apiKey, model, version }) {
   const [labels, setLabels]     = useState(true)
   const [stroke, setStroke]     = useState(2)
   const [result, setResult]     = useState(null)
+  const [modal, setModal]       = useState(false)
   const [loading, setLoading]   = useState(false)
   const [errorKey, setErrorKey] = useState(null)
+  const [errorDetail, setErrorDetail] = useState(null)
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef(null)
 
@@ -70,33 +244,44 @@ export default function ImageUpload({ apiKey, model, version }) {
     const f = e.dataTransfer.files[0]; if (f) { setFile(f); setErrorKey(null) }
   }
 
-  const buildUrl = (extra = '') => {
+  const buildUrl = (extra = '', fmt = format) => {
     let u = `${ROBOFLOW_URL}/${model}/${version}?api_key=${apiKey}`
-    u += `&confidence=${confidence}&overlap=${overlap}&format=${format}`
-    if (format === 'image') { if (labels) u += '&labels=on'; u += `&stroke=${stroke}` }
+    u += `&confidence=${confidence}&overlap=${overlap}&format=${fmt}`
+    if (fmt === 'image') { if (labels) u += '&labels=on'; u += `&stroke=${stroke}` }
     if (extra) u += extra
     return u
   }
 
   const runInference = async (e) => {
-    e.preventDefault(); setErrorKey(null); setResult(null); setLoading(true)
+    e.preventDefault(); setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
     try {
+      let body = ''
+      let extra = ''
       if (method === 'upload') {
         if (!file) { setErrorKey('errorSelectFile'); setLoading(false); return }
-        const base64 = await new Promise((resolve) => {
-          const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(file)
-        })
-        const result = await roboflowPost(buildUrl(), base64, format)
-        setResult(result)
-        setLoading(false)
+        body = await resizeToDataUrl(file)
       } else {
         if (!url) { setErrorKey('errorEnterUrl'); setLoading(false); return }
-        const result = await roboflowPost(buildUrl(`&image=${encodeURIComponent(url)}`), '', format)
-        setResult(result)
-        setLoading(false)
+        extra = `&image=${encodeURIComponent(url)}`
       }
-    } catch {
+
+      if (format === 'image') {
+        // Run image + JSON in parallel so we can show prediction count
+        const [imgResult, jsonResult] = await Promise.all([
+          roboflowPost(buildUrl(extra, 'image'), body, 'image'),
+          roboflowPost(buildUrl(extra, 'json'), body, 'json'),
+        ])
+        const preds = jsonResult?.data?.predictions ?? []
+        setResult({ ...imgResult, count: preds.length, predictions: preds })
+      } else {
+        const result = await roboflowPost(buildUrl(extra, 'json'), body, 'json')
+        const preds = result?.data?.predictions ?? []
+        setResult({ ...result, count: preds.length, predictions: preds })
+      }
+      setLoading(false)
+    } catch (err) {
       setErrorKey('errorInference')
+      setErrorDetail(String(err?.message || err))
       setLoading(false)
     }
   }
@@ -259,8 +444,9 @@ export default function ImageUpload({ apiKey, model, version }) {
 
       {/* Error */}
       {errorKey && (
-        <div className="border rounded-xl px-4 py-3 text-sm" style={{ borderColor: 'var(--c-warn-border)', background: 'var(--c-warn-bg)', color: 'var(--c-warn-text)' }}>
-          {t(errorKey)}
+        <div className="border rounded-xl px-4 py-3 text-sm space-y-1" style={{ borderColor: 'var(--c-warn-border)', background: 'var(--c-warn-bg)', color: 'var(--c-warn-text)' }}>
+          <div>{t(errorKey)}</div>
+          {errorDetail && <div className="text-xs opacity-70 font-mono break-all">{errorDetail}</div>}
         </div>
       )}
 
@@ -270,16 +456,43 @@ export default function ImageUpload({ apiKey, model, version }) {
           <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--c-border)' }}>
             <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('result')}</p>
           </div>
-          <div className="p-4">
+          <div className="p-4 space-y-3">
             {result.type === 'image' ? (
-              <img src={result.data} alt="Inference result" className="w-full rounded-xl" />
+              <img
+                src={result.data} alt="Inference result"
+                className="w-full rounded-xl cursor-zoom-in"
+                onClick={() => setModal(true)}
+              />
             ) : (
               <pre className="text-xs overflow-auto max-h-80 font-mono leading-relaxed" style={{ color: 'var(--c-muted)' }}>
                 {JSON.stringify(result.data, null, 2)}
               </pre>
             )}
+            {result.count !== null && (
+              <div
+                className="text-sm px-3 py-2 rounded-lg text-center font-medium"
+                style={{
+                  background: result.count > 0 ? 'var(--c-warn-bg)' : 'var(--c-hover)',
+                  color: result.count > 0 ? 'var(--c-warn-text)' : 'var(--c-muted)',
+                  border: `1px solid ${result.count > 0 ? 'var(--c-warn-border)' : 'var(--c-border)'}`,
+                }}
+              >
+                {result.count > 0
+                  ? `${t('detectedN')} ${result.count}`
+                  : t('noneDetected')}
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {modal && result?.type === 'image' && (
+        <ImageModal
+          src={result.data}
+          predictions={result.predictions ?? []}
+          onClose={() => setModal(false)}
+          t={t}
+        />
       )}
     </div>
   )
