@@ -56,12 +56,11 @@ jobs:
           pyinstaller --onefile --name backend --distpath dist `
             --hidden-import=tensorflow `
             --hidden-import=flask_socketio `
+            --add-data "model;model" `
             start.py
           cd ..
           New-Item -ItemType Directory -Force -Path "frontend\src-tauri\binaries"
           Copy-Item "backend\dist\backend.exe" "frontend\src-tauri\binaries\backend-x86_64-pc-windows-msvc.exe"
-          New-Item -ItemType Directory -Force -Path "frontend\src-tauri\model"
-          Copy-Item -Recurse "model\*" "frontend\src-tauri\model\"
 
       # Create empty placeholder binaries for non-Windows platforms
       # so Tauri bundler doesn't fail on externalBin
