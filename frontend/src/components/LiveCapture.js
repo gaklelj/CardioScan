@@ -12,7 +12,7 @@ export default function LiveCapture() {
   const socketRef = useRef(null)
 
   useEffect(() => {
-    socketRef.current = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['polling', 'websocket'] })
+    socketRef.current = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['polling'] })
     socketRef.current.on('frame', (data) => {
       setFrame('data:image/jpeg;base64,' + data.image)
       setFrameCount((n) => n + 1)

@@ -121,7 +121,7 @@ export default function EcgRealtime() {
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['polling', 'websocket'] })
+    const socket = io('https://foodtrack.beast-inside.kz', { path: '/cardio/socket.io', transports: ['polling'] })
     socketRef.current = socket
 
     socket.on('connect', () => {
