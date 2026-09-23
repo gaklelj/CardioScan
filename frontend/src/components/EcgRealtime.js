@@ -121,7 +121,8 @@ export default function EcgRealtime() {
     if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
     animFrameRef.current = requestAnimationFrame(drawChart)
 
-    const socket = io(BACKEND, { path: SOCKET_PATH, transports: ['polling'] })
+    const transports = isMobileDevice ? ['polling'] : ['websocket']
+    const socket = io(BACKEND, { path: SOCKET_PATH, transports })
     socketRef.current = socket
 
     socket.on('connect', () => {
@@ -138,17 +139,7 @@ export default function EcgRealtime() {
       setSampleCount(n => n + 1)
       if (data.heart_rate) setHeartRate(data.heart_rate)
     })
-    // Бэкенд шлёт ecg_analysis каждые 1000 точек автоматически
     socket.on('ecg_analysis', (data) => { setAiResult(data); setAiStatus('done') })
-    // В Tauri: Flask читает serial и шлёт точки сам
-    socket.on('ecg_point',  (data) => { if (IS_TAURI) pushValue(data.value) })
-    socket.on('device_status', (data) => {
-      if (IS_TAURI) {
-        setDeviceConnected(data.connected)
-        if (data.connected) setDeviceInfo(data)
-        else setDeviceInfo(null)
-      }
-    })
 
     const onOnline  = () => setIsOnline(true)
     const onOffline = () => setIsOnline(false)
@@ -225,6 +216,7 @@ export default function EcgRealtime() {
     connModeRef.current = mode
     setDeviceConnected(false)
     setDeviceInfo(null)
+    socketRef.current?.emit('check_ecg_device', { mode })
   }
 
   const canStart = scanStatus !== 'scanning'
