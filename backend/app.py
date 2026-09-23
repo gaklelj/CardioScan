@@ -80,9 +80,9 @@ def run_model(ecg_points: list) -> dict:
         raise RuntimeError('Keras model not available')
     arr = np.array(ecg_points, dtype=np.float32)
 
-    mn, mx = arr.min(), arr.max()
-    if mx - mn > 0:
-        arr = (arr - mn) / (mx - mn)
+    mean, std = arr.mean(), arr.std()
+    if std > 0:
+        arr = (arr - mean) / (std + 1e-8)
 
     if len(arr) > _expected_len:
         arr = arr[:_expected_len]
