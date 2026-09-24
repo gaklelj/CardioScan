@@ -3,15 +3,15 @@ import { Activity, Pause, Play, SlidersHorizontal } from 'lucide-react'
 import { useTheme } from '../ThemeContext'
 import { useLanguage } from '../LanguageContext'
 import { monitorCopy } from '../services/monitorCopy'
-import { getViewport } from '../services/ecgViewport'
+import { displayTimeUs, getViewport } from '../services/ecgViewport'
 import { ECG_DARK_COLORS, ECG_LIGHT_COLORS } from '../services/ecgPalette'
 
 
-export default function EcgScope({ recordingRef, timingRef, status, mode, sampleCount }) {
+export default function EcgScope({ recordingRef, timingRef, displayClockRef, status, mode, sampleCount }) {
   const { theme } = useTheme()
   const { lang } = useLanguage()
   const c = monitorCopy(lang)
-  const [seconds, setSeconds] = useState(5)
+  const [seconds, setSeconds] = useState(10)
   const [shared, setShared] = useState(false)
   const [frozenAt, setFrozenAt] = useState(null)
   const canvasRef = useRef(null)
@@ -37,7 +37,15 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.fillStyle = theme === 'light' ? '#fcf4f6' : '#29171d'
       ctx.fillRect(0, 0, W, H)
-      const view = getViewport(recordingRef.current, timingRef.current, seconds, frozenAt ?? undefined)
+      const timing = timingRef.current
+      const endIndex = frozenAt ?? recordingRef.current[0].length
+      const lastTime = timing[endIndex - 1]?.[0]
+      const liveTime = status === 'scanning' && frozenAt === null
+        ? displayTimeUs(displayClockRef?.current, performance.now()) : lastTime
+      // Before the window fills, retain a fixed 0..10 s scale instead of
+      // stretching a short recording over the full width.
+      const endTime = timing.length ? Math.max(timing[0][0] + seconds * 1e6, liveTime ?? lastTime) : undefined
+      const view = getViewport(recordingRef.current, timing, seconds, endIndex, endTime)
       const bounds = view.series.map(values => {
         let min = Infinity, max = -Infinity
         values.forEach(v => { min = Math.min(min, v); max = Math.max(max, v) })
@@ -85,18 +93,18 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
       ctx.font = '11px Inter, sans-serif'
       for (let i = 0; i <= 5; i++) {
         ctx.textAlign = i === 0 ? 'left' : i === 5 ? 'right' : 'center'
-        const value = view.timed ? (i - 5) * seconds / 5 : (i - 5) * 100
+        const value = view.timed ? (view.startTime - timing[0][0]) / 1e6 + i * seconds / 5 : (i - 5) * 100
         ctx.fillText(`${Number(value.toFixed(1))} ${view.timed ? c.seconds : c.samples}`, left + (right - left) * i / 5, H - 15)
       }
       ctx.textAlign = 'left'
     }
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)
-  }, [seconds, shared, frozenAt, theme, c, mode, recordingRef, timingRef])
+  }, [seconds, shared, frozenAt, theme, c, mode, recordingRef, timingRef, displayClockRef, status])
 
   return <section className="scope-card" aria-label={c.chart}>
     <header className="scope-heading">
-      <div><span className="eyebrow">{mode === 'demo' ? 'Симуляция · ECG' : 'ADS1293 · ECG'}</span><h2>{c.chart}</h2></div>
+      <div><span className="eyebrow">{mode === 'demo' ? c.demo : 'ADS1293 · ECG'}</span><h2>{c.chart}</h2></div>
       <span className={`status-pill ${status === 'scanning' ? 'is-active' : ''}`}><span className="status-dot" />{status === 'scanning' ? c.receiving : status === 'done' ? c.finished : c.waiting}</span>
     </header>
     <div className="scope-toolbar">
@@ -108,8 +116,8 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
         {frozenAt === null ? <Pause size={14} /> : <Play size={14} />}{frozenAt === null ? c.pause : c.resume}
       </button>
     </div>
-    <canvas ref={canvasRef} className="ecg-scope-canvas" role="img" aria-label={`${c.chart}: I, II, III, V1. ${c.raw}`} />
+    <canvas ref={canvasRef} className="ecg-scope-canvas" role="img" aria-label={`${c.chart}: I, II, III, V1. ${mode === 'demo' ? c.demoSignal : c.raw}`} />
     {!sampleCount && <div className="scope-empty"><Activity size={15} />{c.empty}</div>}
-    <footer className="scope-footer"><span>{frozenAt !== null && status === 'scanning' ? c.frozen : mode === 'demo' ? 'Симуляция ЭКГ · 72 уд/мин' : c.raw}</span><span>I · II · III · V1</span></footer>
+    <footer className="scope-footer"><span>{frozenAt !== null && status === 'scanning' ? c.frozen : mode === 'demo' ? c.demoSignal : c.raw}</span><span>I · II · III · V1</span></footer>
   </section>
 }

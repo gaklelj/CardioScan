@@ -18,3 +18,12 @@ export function analysisWindow(channels, timing, sampleRateHz) {
     timing: timing.length === count && count > 0 ? timing.slice(start) : undefined,
   }
 }
+
+export function recordedSeconds(channels, timing, sampleRateHz) {
+  const count = channels[0]?.length ?? 0
+  if (count > 1 && timing.length === count) {
+    const span = (timing[count - 1][0] - timing[0][0]) / 1e6
+    return span > 0 ? span * count / (count - 1) : 0
+  }
+  return sampleRateHz > 0 ? count / sampleRateHz : 0
+}

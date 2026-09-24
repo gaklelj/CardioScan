@@ -34,3 +34,18 @@ test('ready state starts recording and keeps gap and queue counters separate', (
   expect(screen.getByText('853.3 Hz')).toBeInTheDocument()
   expect(screen.getByText('Device queue losses: 7')).toBeInTheDocument()
 })
+
+test('offers WiFi, USB and an explicitly labeled judges demo', () => {
+  const { container } = render(<MonitorPanel {...base} />)
+  const modes = container.querySelectorAll('.connection-modes button')
+  expect(Array.from(modes, button => button.textContent)).toEqual(['WiFi', 'USB', 'Judges’ demo'])
+  expect(screen.getByRole('button', { name: 'WiFi' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('demo explains offline access and hides irrelevant connection warnings', () => {
+  render(<MonitorPanel {...base} mode="demo" canStart />)
+  expect(screen.getByRole('button', { name: 'Start recording' })).toBeEnabled()
+  expect(screen.getByText(/No ESP32 or server needed/)).toBeInTheDocument()
+  expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+  expect(screen.queryByText('CardioScan-ESP32')).not.toBeInTheDocument()
+})

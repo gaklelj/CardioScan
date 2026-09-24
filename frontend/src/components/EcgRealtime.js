@@ -1,6 +1,8 @@
-import { DEMO_RATE, DEMO_BPM, DEMO_RESULT, simulatedSample } from '../services/ecgSimulation'
+import { analysisErrorMessage, readAnalysisResponse } from '../services/ecgAnalysis'
 import { parseEcgSample } from '../services/ecgProtocol'
-import { analysisWindow } from '../services/ecgRecording'
+import { analysisWindow, recordedSeconds } from '../services/ecgRecording'
+import { updateDisplayClock } from '../services/ecgViewport'
+import { DEMO_RATE, DEMO_BPM, simulatedSample } from '../services/ecgSimulation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
 import { CloudOff, Upload } from 'lucide-react'
@@ -39,7 +41,7 @@ const CLASS_COLORS = {
 export default function EcgRealtime() {
   const { t } = useLanguage()
 
-  const [connMode,        setConnMode]        = useState('demo')
+  const [connMode,        setConnMode]        = useState('wifi')
   const [serverOnline,    setServerOnline]    = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [deviceInfo,      setDeviceInfo]      = useState(null)
@@ -47,12 +49,21 @@ export default function EcgRealtime() {
   const [streamInfo, setStreamInfo] = useState(null)
   const [streamError, setStreamError] = useState('')
   const timingRef = useRef([])
+  const displayClockRef = useRef(null)
   const streamInfoRef = useRef(null)
   const [duration,        setDuration]        = useState(0)
   const [sampleCount,     setSampleCount]     = useState(0)
   const [heartRate,       setHeartRate]       = useState(null)
   const [aiStatus,        setAiStatus]        = useState('idle')
   const [aiResult,        setAiResult]        = useState(null)
+  const [analysisError, setAnalysisError] = useState(null)
+  const [savingRecord, setSavingRecord] = useState(false)
+  const [resultAtSeconds, setResultAtSeconds] = useState(null)
+  const analysisRequestRef = useRef(null)
+  const liveAnalysisRef = useRef(null)
+  const lastAnalysisAtRef = useRef(-Infinity)
+  const lastAnalysisCountRef = useRef(0)
+  const latestResultRef = useRef(null)
   const [isOnline,        setIsOnline]        = useState(navigator.onLine)
   const [offlineCount,    setOfflineCount]    = useState(() => {
     try { return JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]').length } catch { return 0 }
@@ -76,7 +87,7 @@ export default function EcgRealtime() {
     const updated = { ...rec, modelResult: aiResult }
     saveRecord(updated)
     useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
-  }, [aiResult]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [aiResult, historyVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update history record when riskData arrives
   useEffect(() => {
@@ -117,9 +128,9 @@ export default function EcgRealtime() {
   const socketRef     = useRef(null)
   const recordingRef = useRef([[], [], [], []])
   const scanStatusRef = useRef('idle')
-  const simulationTimerRef = useRef(null)
   const timerRef      = useRef(null)
-  const connModeRef   = useRef('demo')
+  const demoTimerRef = useRef(null)
+  const connModeRef   = useRef('wifi')
   const stopScanRef = useRef(null)
   const startedAtRef = useRef(null)
 
@@ -131,14 +142,15 @@ export default function EcgRealtime() {
 
     socket.on('connect', () => {
       setServerOnline(true)
-      socket.emit('check_ecg_device', { mode: connModeRef.current })
+      if (connModeRef.current !== 'demo') socket.emit('check_ecg_device', { mode: connModeRef.current })
     })
     socket.on('disconnect', () => {
       setServerOnline(false); setDeviceConnected(false)
       if (connModeRef.current !== 'demo') stopScanRef.current?.()
     })
     socket.on('device_status', (data) => {
-      if (!data.connected && connModeRef.current !== 'demo') stopScanRef.current?.()
+      if (connModeRef.current === 'demo') return
+      if (!data.connected) stopScanRef.current?.()
       setDeviceConnected(data.connected)
       setDeviceInfo(data.connected ? data : null)
     })
@@ -150,7 +162,10 @@ export default function EcgRealtime() {
       channels.slice(0, CHANNEL_COUNT).forEach((value, index) => {
         recordingRef.current[index].push(value)
       })
-      if (data.timestamp_us !== undefined) timingRef.current.push([data.timestamp_us, data.sequence, data.lost_samples])
+      if (data.timestamp_us !== undefined) {
+        timingRef.current.push([data.timestamp_us, data.sequence, data.lost_samples])
+        displayClockRef.current = updateDisplayClock(displayClockRef.current, data.timestamp_us, performance.now())
+      }
       if (data.heart_rate) setHeartRate(data.heart_rate)
     }
     socket.on('ecg_point', data => { receivePoint(data); setSampleCount(recordingRef.current[0].length) })
@@ -173,8 +188,10 @@ export default function EcgRealtime() {
 
     return () => {
       clearInterval(timerRef.current)
-      clearInterval(simulationTimerRef.current)
-      socket.emit('stop_ecg')
+      clearInterval(demoTimerRef.current)
+      analysisRequestRef.current?.abort()
+      analysisRequestRef.current = null
+      if (connModeRef.current !== 'demo') socket.emit('stop_ecg')
       socket.disconnect()
       window.removeEventListener('online',  onOnline)
       window.removeEventListener('offline', onOffline)
@@ -182,61 +199,105 @@ export default function EcgRealtime() {
   }, [])
 
   /* ─── Анализ через REST ─────────────────────────────────────────── */
-  const analyzePoints = useCallback(async (channels) => {
+  const analyzePoints = useCallback(async (channels, final = false) => {
+    if (analysisRequestRef.current && !final) return
+    if (final) analysisRequestRef.current?.abort()
     const window = analysisWindow(channels, timingRef.current, streamInfoRef.current?.sample_rate_hz)
     const points = window.channels[0] ?? []
     if (!points.length) return
+    const controller = new AbortController()
+    analysisRequestRef.current = controller
+    lastAnalysisAtRef.current = performance.now()
+    lastAnalysisCountRef.current = channels[0].length
+    const resultTime = recordedSeconds(channels, timingRef.current, streamInfoRef.current?.sample_rate_hz)
     setAiStatus('analyzing')
+    setAnalysisError(null)
     try {
       const res  = await fetch(ANALYZE_URL, {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ points, channels: window.channels,
           sample_rate_hz: streamInfoRef.current?.sample_rate_hz,
           timing: window.timing,
-          missing_samples: streamInfoRef.current?.missing_samples ?? 0 }),
+          // Complete per-sample timing is validated for this window by the
+          // backend; losses before it must not poison all later live windows.
+          missing_samples: window.timing ? 0 : streamInfoRef.current?.missing_samples ?? 0 }),
       })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      const data = await readAnalysisResponse(res)
+      if (analysisRequestRef.current !== controller) return
+      latestResultRef.current = data
+      setResultAtSeconds(resultTime)
       setAiResult(data); setAiStatus('done')
-    } catch (error) { setAiStatus('error'); setStreamError(error.message) }
+    } catch (error) {
+      if (analysisRequestRef.current === controller && error.name !== 'AbortError') {
+        setAiStatus('error'); setAnalysisError(error)
+      }
+    } finally {
+      if (analysisRequestRef.current === controller) analysisRequestRef.current = null
+    }
   }, [])
+
+  liveAnalysisRef.current = () => {
+    if (connModeRef.current === 'demo') return
+    if (scanStatusRef.current !== 'scanning' || analysisRequestRef.current) return
+    if (performance.now() - lastAnalysisAtRef.current < 2000) return
+    const channels = recordingRef.current.filter(channel => channel.length)
+    if (channels[0]?.length === lastAnalysisCountRef.current) return
+    if (channels.length < 3 || recordedSeconds(channels, timingRef.current, streamInfoRef.current?.sample_rate_hz) < 10) return
+    analyzePoints(channels)
+  }
 
   /* ─── Старт / стоп ──────────────────────────────────────────────── */
   const startScan = () => {
     if (scanStatusRef.current === 'scanning') return
     startedAtRef.current = Date.now()
+    analysisRequestRef.current?.abort()
+    analysisRequestRef.current = null
+    lastAnalysisAtRef.current = -Infinity
+    lastAnalysisCountRef.current = 0
+    latestResultRef.current = null
+    setResultAtSeconds(null)
     recordingRef.current = [[], [], [], []]
     timingRef.current = []
+    displayClockRef.current = null
     streamInfoRef.current = null
     setStreamInfo(null)
     setStreamError('')
     historyId.current = null
     setSampleCount(0); setDuration(0); setHeartRate(null)
-    setAiResult(null); setAiStatus('idle')
+    setAiResult(null); setAiStatus('idle'); setAnalysisError(null)
     setSymptoms(null); setShowSymptoms(false)
     setRiskData(null); setRiskLoading(false)
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
     if (connModeRef.current === 'demo') {
+      const began = performance.now()
+      displayClockRef.current = { deviceUs: 0, receivedAtMs: began }
       setHeartRate(DEMO_BPM)
-      setAiResult(DEMO_RESULT); setAiStatus('done')
-      const appendSamples = () => {
-        const target = Math.floor((Date.now() - startedAtRef.current) * DEMO_RATE / 1000) + 1
-        for (let i = recordingRef.current[0].length; i < target; i++) {
+      const appendDemo = () => {
+        const target = Math.floor((performance.now() - began) * DEMO_RATE / 1000) + 1
+        // Bound recovery work when the tab resumes after a long suspension.
+        // Keep sequence/time gaps visible instead of freezing the browser.
+        const previous = timingRef.current.at(-1)?.[1] ?? -1
+        const first = Math.max(previous + 1, target - DEMO_RATE * 10)
+        for (let i = first; i < target; i++) {
           simulatedSample(i).forEach((value, lead) => recordingRef.current[lead].push(value))
           timingRef.current.push([i * 1e6 / DEMO_RATE, i, 0])
         }
-        const info = { sample_rate_hz: DEMO_RATE, missing_samples: 0, frames: [{ lost_samples: 0 }] }
+        const info = { sample_rate_hz: DEMO_RATE, missing_samples: target - recordingRef.current[0].length, frames: [{ lost_samples: 0 }] }
         streamInfoRef.current = info
         setStreamInfo(info)
         setSampleCount(recordingRef.current[0].length)
       }
-      appendSamples()
-      simulationTimerRef.current = setInterval(appendSamples, 40)
+      appendDemo()
+      demoTimerRef.current = setInterval(appendDemo, 40)
     } else {
       socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
     }
-    timerRef.current = setInterval(() => setDuration(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
+    timerRef.current = setInterval(() => {
+      setDuration(Math.floor((Date.now() - startedAtRef.current) / 1000))
+      liveAnalysisRef.current?.()
+    }, 1000)
   }
 
   const stopScan = async () => {
@@ -244,23 +305,23 @@ export default function EcgRealtime() {
     const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
     setDuration(elapsed)
     clearInterval(timerRef.current)
-    clearInterval(simulationTimerRef.current)
-    const simulated = connModeRef.current === 'demo'
-    if (!simulated) socketRef.current?.emit('stop_ecg')
+    clearInterval(demoTimerRef.current)
+    if (connModeRef.current !== 'demo') socketRef.current?.emit('stop_ecg')
     setScanStatus('done'); scanStatusRef.current = 'done'
+    if (connModeRef.current === 'demo') return
 
     const channels = recordingRef.current.filter(channel => channel.length).map(channel => [...channel])
     if (!channels.length) { setAiStatus('idle'); return }
-    setAiStatus(simulated ? 'done' : 'analyzing')
-    setShowSymptoms(!simulated)
+    setAiStatus('analyzing')
+    setSavingRecord(true)
 
     // Save record to history immediately with points; model result will be updated via socket/analyzePoints
     historyId.current = null
     try {
       const rec = await addToHistory({
         type:        'live',
-        modelResult: simulated ? DEMO_RESULT : null,
-        aiSummary: simulated ? 'Симуляция ЭКГ: нормальный синусовый ритм, 72 уд/мин.' : null,
+        modelResult: latestResultRef.current,
+        aiSummary: null,
         ecgPoints:   channels[0],
         ecgChannels: channels,
         ecgTiming: [...timingRef.current],
@@ -276,8 +337,10 @@ export default function EcgRealtime() {
       setHistoryVersion(v => v + 1)
     } catch (error) {
       setStreamError(String(error))
+    } finally {
+      setSavingRecord(false)
     }
-    if (!simulated) analyzePoints(channels)
+    analyzePoints(channels, true)
   }
 
   stopScanRef.current = stopScan
@@ -304,7 +367,21 @@ export default function EcgRealtime() {
   }
 
   const handleModeChange = (mode) => {
-    if (scanStatus === 'scanning') return
+    if (scanStatus === 'scanning' || savingRecord || !['wifi', 'usb', 'demo'].includes(mode)) return
+    analysisRequestRef.current?.abort()
+    analysisRequestRef.current = null
+    setAiResult(null); setAiStatus('idle'); setAnalysisError(null)
+    latestResultRef.current = null
+    historyId.current = null
+    setResultAtSeconds(null)
+    recordingRef.current = [[], [], [], []]
+    timingRef.current = []
+    displayClockRef.current = null
+    streamInfoRef.current = null
+    setStreamInfo(null); setStreamError('')
+    setSampleCount(0); setDuration(0); setHeartRate(null)
+    setScanStatus('idle'); scanStatusRef.current = 'idle'
+    setSymptoms(null); setRiskData(null); setShowSymptoms(false)
     setConnMode(mode)
     connModeRef.current = mode
     setDeviceConnected(false)
@@ -312,18 +389,17 @@ export default function EcgRealtime() {
     if (mode !== 'demo') socketRef.current?.emit('check_ecg_device', { mode })
   }
 
-  const canStart = (connMode === 'demo' || serverOnline) && scanStatus !== 'scanning' && aiStatus !== 'analyzing'
+  const canStart = (connMode === 'demo' || serverOnline) && scanStatus !== 'scanning' && aiStatus !== 'analyzing' && !savingRecord
   return (
     <div className="space-y-3">
 
-      {connMode === 'demo' && <p className="record-note" role="status">Симуляция ЭКГ · нормальный синусовый ритм · 72 уд/мин</p>}
       <MonitorPanel mode={connMode} changeMode={handleModeChange} serverOnline={serverOnline}
         deviceConnected={deviceConnected} deviceInfo={deviceInfo} status={scanStatus}
         duration={duration} sampleCount={sampleCount} streamInfo={streamInfo} canStart={canStart}
         start={startScan} stop={stopScan} error={streamError}>
-        <EcgScope recordingRef={recordingRef} timingRef={timingRef} status={scanStatus} mode={connMode} sampleCount={sampleCount} />
+        <EcgScope recordingRef={recordingRef} timingRef={timingRef} displayClockRef={displayClockRef} status={scanStatus} mode={connMode} sampleCount={sampleCount} />
       </MonitorPanel>
-      {offlineCount > 0 && (
+      {connMode !== 'demo' && offlineCount > 0 && (
         <div className="border rounded-2xl p-4 flex items-center justify-between gap-3"
           style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
           <div className="flex items-center gap-2">
@@ -344,16 +420,8 @@ export default function EcgRealtime() {
         </div>
       )}
 
-      {symptoms?.readable?.length > 0 && (
-        <SymptomsCard symptoms={symptoms.readable} t={t} />
-      )}
-
-      {/* Оценка кардиологического риска */}
-      <RiskAssessmentCard riskData={riskData} loading={riskLoading} t={t} />
-      <PatientDataStatus questionnaire={symptoms} t={t} />
-
       {/* Результат AI */}
-      {(aiStatus === 'analyzing' || aiStatus === 'done' || aiStatus === 'error') && (
+      {connMode !== 'demo' && (
         <div className="border rounded-2xl overflow-hidden animate-fade-in"
           style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--c-border)' }}>
@@ -369,7 +437,9 @@ export default function EcgRealtime() {
             )}
           </div>
           <div className="p-4">
-            {aiStatus === 'analyzing' && (
+            {aiStatus === 'idle' && <p className="text-sm" role="status">{t('ecgAwaitingAnalysis')}</p>}
+            {aiResult && resultAtSeconds !== null && <p className="text-xs mb-3" role="status">{t('ecgLastAnalysis')}: {resultAtSeconds.toFixed(1)} {t('ecgSecondsUnit')}</p>}
+            {aiStatus === 'analyzing' && !aiResult && (
               <div className="flex justify-center py-8">
                 <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--c-dim)' }}>
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -377,7 +447,7 @@ export default function EcgRealtime() {
                 </svg>
               </div>
             )}
-            {aiStatus === 'done' && aiResult && (
+            {aiResult && (
               <div className="space-y-3">
                 {aiResult.model === 'ecg_ads1293' && <p className="text-xs" style={{ color: 'var(--c-dim)' }}>{t('ecgModelScore')}</p>}
                 {aiResult.class === 'NOISE' && <p className="text-sm" style={{ color: '#f59e0b' }}>{t('ecgRepeatNoise')}</p>}
@@ -390,7 +460,7 @@ export default function EcgRealtime() {
                     {aiResult.labels?.join(', ') || aiResult.class}
                   </span>
                   <span className="text-sm font-mono font-medium" style={{ color: CLASS_COLORS[aiResult.class] ?? 'var(--c-text)' }}>
-                    {aiResult.simulated ? '72 уд/мин' : `${(aiResult.confidence * 100).toFixed(1)}%`}
+                    {`${(aiResult.confidence * 100).toFixed(1)}%`}
                   </span>
                 </div>
                 {aiResult.all && aiResult.class !== 'NOISE' && (
@@ -412,11 +482,19 @@ export default function EcgRealtime() {
               </div>
             )}
             {aiStatus === 'error' && (
-              <p className="text-sm text-center py-4" style={{ color: 'var(--c-warn-text)' }}>{t('errorInference')}</p>
+              <p className="text-sm text-center py-4" style={{ color: 'var(--c-warn-text)' }}>{analysisErrorMessage(analysisError, t)}</p>
             )}
           </div>
         </div>
       )}
+
+      {connMode !== 'demo' && <button type="button" className="scope-tool" onClick={() => setShowSymptoms(true)}>{t('ecgOpenQuestionnaire')}</button>}
+
+      {symptoms?.readable?.length > 0 && (
+        <SymptomsCard symptoms={symptoms.readable} t={t} />
+      )}
+      <RiskAssessmentCard riskData={riskData} loading={riskLoading} t={t} />
+      {connMode !== 'demo' && <PatientDataStatus questionnaire={symptoms} t={t} />}
 
       <SymptomsModal
         open={showSymptoms}

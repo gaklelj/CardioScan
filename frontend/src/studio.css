@@ -44,7 +44,8 @@ button:disabled { cursor: not-allowed; }
 .connection-title h2 { font-size: 13px; font-weight: 600; }
 .connection-title h2 span { font-size: 11px; font-weight: 400; color: var(--c-muted); }
 .connection-title p { font-size: 11px; color: var(--c-dim); margin-top: 4px; }
-.connection-modes { display: flex; background: var(--c-surface); padding: 4px; border-radius: 8px; gap: 4px; margin-bottom: 19px; }
+.connection-modes { display: flex; flex-wrap: wrap; background: var(--c-surface); padding: 4px; border-radius: 8px; gap: 4px; margin-bottom: 19px; }
+.connection-modes button:last-child { flex-basis: 100%; }
 .connection-modes button { display: flex; justify-content: center; align-items: center; flex: 1; gap: 6px; padding: 8px 0; font-size: 11px; color: var(--c-dim); border-radius: 5px; cursor: pointer; }
 .connection-modes button[aria-pressed="true"] { background: var(--c-hover); color: var(--c-highlight); }
 .connection-status { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; margin: 12px 0; color: var(--c-muted); }

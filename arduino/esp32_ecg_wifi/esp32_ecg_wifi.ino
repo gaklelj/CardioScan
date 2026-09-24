@@ -33,7 +33,8 @@
   lost_samples counts known acquisition backlog + queue overflow only;
   it cannot detect every hardware or network loss. ADC has no sample FIFO.
   Serial 115200: register checks, data-ready timeout and sampling statistics.
-  Open this file in a folder named CardioScan5; upload with electrodes off.
+  Open arduino/esp32_ecg_wifi/esp32_ecg_wifi.ino; upload with electrodes off.
+  The root firmware_synthetic_v2.ino is a separate USB/WiFi test generator.
 */
 #include <Arduino.h>
 #include <SPI.h>
@@ -43,6 +44,10 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <cstring>
+
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+#error "Select ESP32 Dev Module (classic ESP32); this wiring is not for ESP8266/C3/S3."
+#endif
 
 constexpr uint8_t PIN_SCLK=18, PIN_MISO=19, PIN_MOSI=23, PIN_CSB=27, PIN_DRDY=34;
 constexpr uint16_t TCP_PORT=3333;
@@ -56,6 +61,9 @@ struct EcgSample {
   uint32_t sequence, ch1, ch2, ch3, lost;
   int32_t leadIII;
 };
+// Explicit declaration prevents Arduino's generated prototypes from using the
+// custom type before its definition.
+void readChannels(EcgSample& s);
 QueueHandle_t samples=nullptr;
 TaskHandle_t acquisitionHandle=nullptr;
 
@@ -123,6 +131,7 @@ bool configureADS() {
     {0x25,0x00}, // R1=4 on all channels
     {0x26,0x00}, // Enable ECG decimation filters
     {0x27,0x08}, // DRDY source ECG CH1; identical rates for all channels
+    {0x28,0x40}, // Restore standalone operation: SYNCB output disabled
     {0x29,0x00}, // No optional DRDY masking
     {0x2F,0x70}  // DATA_LOOP: CH1, CH2, CH3 ECG only
   };
@@ -142,6 +151,7 @@ bool configureADS() {
       case 0x10: case 0x11: mask=0x03; break;
       case 0x27: case 0x29: mask=0x3F; break;
       case 0x2F: mask=0x7F; break;
+      case 0x28: mask=0x7F; break;
     }
     if ((actual & mask) != (item[1] & mask)) {
       Serial.printf("Register 0x%02X: wrote 0x%02X, read 0x%02X\n",
@@ -159,12 +169,25 @@ void IRAM_ATTR dataReadyISR() {
 }
 
 void acquireTask(void*) {
+  acquisitionHandle=xTaskGetCurrentTaskHandle();
+  // setup() and this task must never access SPI concurrently. In particular,
+  // the first DRDY may arrive before the start-conversion SPI write finishes.
+  // The notification remains pending until this task finishes that write.
+  attachInterrupt(digitalPinToInterrupt(PIN_DRDY),dataReadyISR,FALLING);
+  adsWrite(0x00,0x01);
+  if ((adsRead(0x00) & 0x01) == 0) {
+    Serial.println("ERROR: ADS1293 did not start conversion. Restart after checking wiring.");
+    detachInterrupt(digitalPinToInterrupt(PIN_DRDY));
+    vTaskDelete(nullptr);
+    return;
+  }
+  Serial.println("Started: I, II, computed III, measured V1; nominal 853.333 samples/s.");
   uint32_t sequence=0, lost=0, windowReads=0;
   uint32_t windowStart=millis();
   for (;;) {
     uint32_t ready=ulTaskNotifyTake(pdTRUE,pdMS_TO_TICKS(2000));
     if (!ready) {
-      Serial.println("No DRDY for 2 s: check DRDB->GPIO34, crystal, reset and power.");
+      Serial.println("No DRDY for 2 s: check DRDYB->GPIO34, crystal, reset and power.");
       continue; // Never manufacture repeated samples on a timeout.
     }
     if (ready > 1) {
@@ -212,6 +235,8 @@ void networkTask(void*) {
       used=0;
       client=server.available();
       if (client) {
+        // A new recording starts with fresh samples, never a previous backlog.
+        xQueueReset(samples);
         client.setNoDelay(true);
         client.setTimeout(1000);
         const char* header="timestamp_us,sequence,lead_I_raw,lead_II_raw,lead_III_raw,V1_raw,lost_samples\r\n";
@@ -269,15 +294,10 @@ void setup() {
   server.setNoDelay(true);
   Serial.printf("WiFi: %s / %s\n",AP_NAME,AP_PASSWORD);
   Serial.print("TCP: "); Serial.print(WiFi.softAPIP()); Serial.printf(":%u\n",TCP_PORT);
-  if (xTaskCreatePinnedToCore(acquireTask,"ADS acquisition",4096,nullptr,3,
-      &acquisitionHandle,1) != pdPASS) haltWithError("Cannot start ADC task.");
   if (xTaskCreatePinnedToCore(networkTask,"TCP sender",6144,nullptr,1,
       nullptr,0) != pdPASS) haltWithError("Cannot start network task.");
-
-  // Attach BEFORE starting conversion, unlike the earlier sketch.
-  attachInterrupt(digitalPinToInterrupt(PIN_DRDY),dataReadyISR,FALLING);
-  adsWrite(0x00,0x01);
-  Serial.println("Started: I, II, computed III, measured V1; nominal 853.333 samples/s.");
+  if (xTaskCreatePinnedToCore(acquireTask,"ADS acquisition",4096,nullptr,3,
+      &acquisitionHandle,1) != pdPASS) haltWithError("Cannot start ADC task.");
 }
 
 void loop() { delay(1000); }
