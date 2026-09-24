@@ -23,12 +23,12 @@ export default function MonitorPanel({ children, mode, changeMode, serverOnline,
       <aside className="connection-card">
         <div className="connection-title"><span className="device-icon"><Wifi size={21} /></span><div><h2>ADS1293 <span>/ ESP32</span></h2><p>{c.connection}</p></div></div>
         <div className="connection-modes" aria-label={c.connection}>
-          {[['wifi', Wifi, 'WiFi'], ['usb', Usb, 'USB']].map(([id, Icon, label]) =>
+          {[['demo', Activity, 'Симуляция'], ['wifi', Wifi, 'WiFi'], ['usb', Usb, 'USB']].map(([id, Icon, label]) =>
             <button key={id} aria-pressed={mode === id} disabled={running} onClick={() => changeMode(id)}><Icon size={14} />{label}</button>)}
         </div>
         <div className="connection-status"><span>{c.server}</span><span className={serverOnline ? 'text-connected' : 'text-disconnected'}><i />{serverOnline ? c.online : c.offline}</span></div>
         <div className="connection-status"><span>{c.device}</span><span className={deviceConnected ? 'text-connected' : 'text-disconnected'}><i />{deviceConnected ? c.connected : c.disconnected}</span></div>
-        {mode === 'wifi' ? <div className="network-details"><span>{c.network}</span><strong>CardioScan-ESP32</strong><p>{c.password}: <code>12345678</code></p><p>{c.connectHelp}</p></div>
+        {mode === 'demo' ? <p className="connection-help">Симуляция нормального синусового ритма. Устройство не требуется.</p> : mode !== 'usb' ? <div className="network-details"><span>{c.network}</span><strong>CardioScan-ESP32</strong><p>{c.password}: <code>12345678</code></p><p>{c.connectHelp}</p></div>
           : <p className="connection-help">{c.legacy}</p>}
         {deviceInfo?.port && <code className="device-address">{deviceInfo.port}</code>}
         {error && <p role="alert" className="connection-error">{error}</p>}
@@ -37,7 +37,7 @@ export default function MonitorPanel({ children, mode, changeMode, serverOnline,
         </button>
         <p className="record-note">{c.saved}</p>
         <div className="lead-legend">
-          {['I', 'II', 'III', 'V1'].map((lead, i) => <div key={lead}><span className={`lead-token lead-${i}`}>{mode === 'wifi' ? lead : `CH${i + 1}`}</span><span>{i === 2 && mode === 'wifi' ? c.derived : c.measured}</span><code>{mode === 'wifi' ? ['LA − RA', 'LL − RA', 'II − I', 'V1 − WCT'][i] : ''}</code></div>)}
+          {['I', 'II', 'III', 'V1'].map((lead, i) => <div key={lead}><span className={`lead-token lead-${i}`}>{mode !== 'usb' ? lead : `CH${i + 1}`}</span><span>{i === 2 && mode !== 'usb' ? c.derived : c.measured}</span><code>{mode !== 'usb' ? ['LA − RA', 'LL − RA', 'II − I', 'V1 − WCT'][i] : ''}</code></div>)}
         </div>
         <p className="record-note">{c.queue}: {streamInfo?.frames.at(-1)?.lost_samples ?? '—'}</p>
         <Link className="connection-link" to="/guide">{c.guide}<ArrowUpRight size={15} /></Link>

@@ -4,6 +4,8 @@ import { Clock, Trash2, FileDown, Activity, Upload, Wifi, Usb, Bluetooth, AlertT
 import Nav from '../components/Nav'
 import useHistoryStore from '../store/useHistoryStore'
 import { generatePDF } from '../services/generatePDF'
+import { patientRows } from '../services/patientData'
+import translations from '../translations'
 import { useLanguage } from '../LanguageContext'
 
 const RISK_COLORS = {
@@ -44,7 +46,7 @@ function TopClass({ record }) {
     const col = CLASS_COLORS[mr.class] ?? '#6b7280'
     return (
       <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: `${col}22`, color: col, border: `1px solid ${col}44` }}>
-        {mr.class}
+        {mr.simulated ? 'Норма · симуляция' : mr.class}
       </span>
     )
   }
@@ -144,7 +146,7 @@ function ExpandedRecord({ record, onClose, lang }) {
               <div className="rounded-xl px-4 py-3 mb-2"
                 style={{ background: `${CLASS_COLORS[mr.class] ?? '#6b7280'}18`, border: `1px solid ${CLASS_COLORS[mr.class] ?? '#6b7280'}44` }}>
                 <span className="font-bold text-sm" style={{ color: CLASS_COLORS[mr.class] ?? 'var(--c-text)' }}>{mr.class}</span>
-                <span className="ml-2 text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{(mr.confidence * 100).toFixed(1)}%</span>
+                <span className="ml-2 text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{mr.simulated ? 'Симуляция · 72 уд/мин' : `${(mr.confidence * 100).toFixed(1)}%`}</span>
               </div>
               {mr.all && (
                 <div className="space-y-1.5">
@@ -195,12 +197,7 @@ function ExpandedRecord({ record, onClose, lang }) {
             <div>
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-dim)' }}>Данные пациента</p>
               <div className="grid grid-cols-2 gap-2">
-                {[
-                  ['Возраст', `${record.demographics.age} лет`],
-                  ['Пол', record.demographics.sex === 1 ? 'Мужской' : 'Женский'],
-                  record.demographics.sbp         && ['АД сист.', `${record.demographics.sbp} мм рт.ст.`],
-                  record.demographics.cholesterol && ['Холестерин', `${record.demographics.cholesterol} ммоль/л`],
-                ].filter(Boolean).map(([k, v]) => (
+                {patientRows(record.demographics, key => translations[lang]?.[key] || translations.ru[key] || key).map(([k, v]) => (
                   <div key={k} className="rounded-lg p-3" style={{ background: 'var(--c-card)', border: '1px solid var(--c-border)' }}>
                     <p className="text-xs" style={{ color: 'var(--c-dim)' }}>{k}</p>
                     <p className="text-sm font-medium mt-0.5" style={{ color: 'var(--c-text)' }}>{v}</p>
@@ -209,6 +206,11 @@ function ExpandedRecord({ record, onClose, lang }) {
               </div>
             </div>
           )}
+
+          {record.symptoms?.length > 0 && <div>
+            <p className="text-xs uppercase mb-2">Симптомы со слов пользователя</p>
+            {record.symptoms.map(({ question, answer }, i) => <p key={i} className="text-sm mb-2">{question}: {answer}</p>)}
+          </div>}
 
           {/* Live stats */}
           {record.type === 'live' && (

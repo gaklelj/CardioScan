@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, ChevronRight, ChevronLeft, Check, Heart, Minus, Plus } from 'lucide-react'
+import { X, ChevronRight, ChevronLeft, Check, Heart } from 'lucide-react'
+import { EMPTY_DEMOGRAPHICS } from '../services/patientData'
 
 const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
 
@@ -13,7 +14,7 @@ const Q_DEFS = [
   { id: 'sq6', type: 'single', optCount: 2, showIf: (a) => a.sq1 === 0 },
 ]
 
-const DEFAULT_DEMO = { age: 45, sex: 0, sbp: 120, cholesterol: 5.0, smoking: 0 }
+const DEFAULT_DEMO = EMPTY_DEMOGRAPHICS
 
 // Compute rose_flag from Rose questionnaire answers
 function computeRoseFlag(answers) {
@@ -68,106 +69,42 @@ export function SymptomsCard({ symptoms, t }) {
 
 // ── Demographics form (Step 1) ────────────────────────────────────────────────
 function DemographicsStep({ demo, onChange, t }) {
-  const pill = (active) => ({
-    flex: 1, padding: '9px 8px', borderRadius: '10px', cursor: 'pointer',
-    fontSize: '13px', fontWeight: 500, border: 'none',
-    background: active ? 'var(--c-accent)' : 'var(--c-border)',
-    color: active ? 'var(--c-accent-fg)' : 'var(--c-dim)',
-    transition: 'all 0.15s ease',
-  })
-
-  const rowStyle = { marginBottom: '16px' }
-  const labelStyle = { fontSize: '12px', color: 'var(--c-dim)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
-  const valueStyle = { fontSize: '13px', fontWeight: 600, color: 'var(--c-text)' }
-
+  const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--c-border)', background: 'var(--c-card)', color: 'var(--c-text)' }
+  const numeric = [
+    ['age', 'sqAge', 'sqAgeUnit', 18, 100, 1],
+    ['sbp', 'sqSbp', 'sqSbpUnit', 50, 300, 1],
+    ['cholesterol', 'sqCholesterol', 'sqCholUnit', 0.1, 30, 0.1],
+  ]
   return (
     <div style={{ padding: '6px 18px 4px' }}>
-
-      {/* Age */}
-      <div style={rowStyle}>
-        <div style={labelStyle}>
-          <span>{t('sqAge')}</span>
+      <p className="text-xs mb-3" style={{ color: 'var(--c-dim)' }}>{t('sqDataHelp')}</p>
+      {numeric.map(([key, label, unit, min, max, step]) => (
+        <div key={key} className="mb-3">
+          <label htmlFor={'patient-' + key} className="text-xs block mb-1">{t(label)} ({t(unit)})</label>
+          <input id={'patient-' + key} type="number" min={min} max={max} step={step}
+            value={demo[key] ?? ''} placeholder={t('sqUnknown')} style={inputStyle}
+            onChange={e => onChange(key, e.target.value === '' ? null : Number(e.target.value))}
+            onBlur={e => { if (!e.target.validity.valid) onChange(key, null) }} />
+          <button type="button" onClick={() => onChange(key, null)} className="text-xs mt-1 underline" style={{ color: 'var(--c-dim)' }}>{t('sqUnknown')}</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={() => onChange('age', Math.max(18, demo.age - 1))}
-            style={{
-              width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid var(--c-border)', background: 'transparent', cursor: 'pointer', color: 'var(--c-muted)',
-            }}
-          ><Minus size={14} /></button>
-          <span style={{ ...valueStyle, fontSize: '22px', minWidth: '48px', textAlign: 'center' }}>{demo.age}</span>
-          <button
-            onClick={() => onChange('age', Math.min(100, demo.age + 1))}
-            style={{
-              width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid var(--c-border)', background: 'transparent', cursor: 'pointer', color: 'var(--c-muted)',
-            }}
-          ><Plus size={14} /></button>
-          <span style={{ fontSize: '12px', color: 'var(--c-dim)' }}>{t('sqAgeUnit')}</span>
+      ))}
+      {[
+        ['sex', 'sqSex', 'sqSexF', 'sqSexM'],
+        ['smoking', 'sqSmoking', 'sqSmokingNo', 'sqSmokingYes'],
+      ].map(([key, label, no, yes]) => (
+        <div key={key} className="mb-3">
+          <label htmlFor={'patient-' + key} className="text-xs block mb-1">{t(label)}</label>
+          <select id={'patient-' + key} value={demo[key] ?? ''} style={inputStyle}
+            onChange={e => onChange(key, e.target.value === '' ? null : Number(e.target.value))}>
+            <option value="">{t('sqUnknown')}</option>
+            <option value="0">{t(no)}</option><option value="1">{t(yes)}</option>
+          </select>
         </div>
-      </div>
-
-      {/* Sex */}
-      <div style={rowStyle}>
-        <div style={labelStyle}><span>{t('sqSex')}</span></div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => onChange('sex', 0)} style={pill(demo.sex === 0)}>{t('sqSexF')}</button>
-          <button onClick={() => onChange('sex', 1)} style={pill(demo.sex === 1)}>{t('sqSexM')}</button>
-        </div>
-      </div>
-
-      {/* SBP */}
-      <div style={rowStyle}>
-        <div style={labelStyle}>
-          <span>{t('sqSbp')}</span>
-          <span style={valueStyle}>{demo.sbp} {t('sqSbpUnit')}</span>
-        </div>
-        <input
-          type="range" min="90" max="200" step="1"
-          value={demo.sbp}
-          onChange={e => onChange('sbp', +e.target.value)}
-          className="risk-slider"
-          style={{ width: '100%', accentColor: '#ef4444' }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-          <span style={{ fontSize: '10px', color: 'var(--c-dim)' }}>90</span>
-          <span style={{ fontSize: '10px', color: 'var(--c-dim)' }}>200</span>
-        </div>
-      </div>
-
-      {/* Cholesterol */}
-      <div style={rowStyle}>
-        <div style={labelStyle}>
-          <span>{t('sqCholesterol')}</span>
-          <span style={valueStyle}>{demo.cholesterol.toFixed(1)} {t('sqCholUnit')}</span>
-        </div>
-        <input
-          type="range" min="3" max="8" step="0.1"
-          value={demo.cholesterol}
-          onChange={e => onChange('cholesterol', +parseFloat(e.target.value).toFixed(1))}
-          className="risk-slider"
-          style={{ width: '100%', accentColor: '#ef4444' }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-          <span style={{ fontSize: '10px', color: 'var(--c-dim)' }}>3.0</span>
-          <span style={{ fontSize: '10px', color: 'var(--c-dim)' }}>8.0</span>
-        </div>
-      </div>
-
-      {/* Smoking */}
-      <div style={{ ...rowStyle, marginBottom: 0 }}>
-        <div style={labelStyle}><span>{t('sqSmoking')}</span></div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => onChange('smoking', 0)} style={pill(demo.smoking === 0)}>{t('sqSmokingNo')}</button>
-          <button onClick={() => onChange('smoking', 1)} style={pill(demo.smoking === 1)}>{t('sqSmokingYes')}</button>
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
 
-// ── Main modal ────────────────────────────────────────────────────────────────
 export default function SymptomsModal({ open, onClose, onSubmit, t }) {
   const [demoPhase, setDemoPhase] = useState(true)
   const [demo, setDemo]           = useState(DEFAULT_DEMO)
@@ -233,7 +170,7 @@ export default function SymptomsModal({ open, onClose, onSubmit, t }) {
   }
 
   const handleSkip = () => {
-    onSubmit({ readable: [], demographics: demo, roseFlag: 0 })
+    onSubmit({ readable: buildReadableSymptoms(answers, t), demographics: demo, roseFlag: null })
     onClose()
   }
 
@@ -257,6 +194,8 @@ export default function SymptomsModal({ open, onClose, onSubmit, t }) {
     transform: 'translateX(-50%)',
     zIndex: 1100,
     width: '460px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
     maxWidth: 'calc(100vw - 32px)',
     borderRadius: '20px',
     background: 'var(--c-card)',

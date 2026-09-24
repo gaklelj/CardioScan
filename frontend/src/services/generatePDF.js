@@ -1,6 +1,11 @@
 import { ECG_DARK_COLORS } from './ecgPalette'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import { patientRows, missingPatientFields, PATIENT_FIELDS } from './patientData'
+import translations from '../translations'
+
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
+const CLASS_NAMES = { CD: 'Нарушения проводимости', HYP: 'Признаки гипертрофии', MI: 'Паттерны класса инфаркта миокарда', STTC: 'Изменения ST–T', NORM: 'Паттерн нормы', AF: 'Фибрилляция предсердий', NOISE: 'Помехи', Uncertain: 'Неопределённый результат' }
 
 const RISK_COLORS = {
   'Низкий': '#22c55e', 'Low': '#22c55e', 'Төмен': '#22c55e',
@@ -58,30 +63,52 @@ function miniWaveformSVG(points, channels, labels) {
   </svg>`
 }
 
-function buildHTML(record, lang) {
+export function buildHTML(record, lang = 'ru') {
   const typeLabel = record.type === 'live' ? 'Лайв-запись' : 'Загруженный снимок'
   const riskColor = record.riskData ? (RISK_COLORS[record.riskData.risk_class] ?? '#6b7280') : null
+  const t = key => translations[lang]?.[key] || translations.ru[key] || key
 
-  const demographicsHTML = record.demographics ? `
+  const demographicsHTML = `
     <div class="section">
       <div class="section-title">Данные пациента</div>
       <div class="two-col">
-        <div class="kv"><span class="k">Возраст</span><span class="v">${record.demographics.age} лет</span></div>
-        <div class="kv"><span class="k">Пол</span><span class="v">${record.demographics.sex === 1 ? 'Мужской' : 'Женский'}</span></div>
-        ${record.demographics.sbp ? `<div class="kv"><span class="k">АД систол.</span><span class="v">${record.demographics.sbp} мм рт.ст.</span></div>` : ''}
-        ${record.demographics.cholesterol ? `<div class="kv"><span class="k">Холестерин</span><span class="v">${record.demographics.cholesterol} ммоль/л</span></div>` : ''}
-        ${record.demographics.smoking != null ? `<div class="kv"><span class="k">Курение</span><span class="v">${record.demographics.smoking ? 'Да' : 'Нет'}</span></div>` : ''}
+        ${patientRows(record.demographics, t).map(([key, value]) => `<div class="kv"><span class="k">${escapeHTML(key)}</span><span class="v">${escapeHTML(value)}</span></div>`).join('')}
       </div>
-    </div>` : ''
+      <p class="rec">Источник: анкета пользователя; данные не подтверждены медицинским специалистом.${record.demographics && record.questionnaireVersion !== 2 ? ' Старая запись: часть значений могла быть заполнена автоматически; требуется уточнение.' : ''}</p>
+    </div>`
 
-  const riskHTML = record.riskData ? `
+  const missing = missingPatientFields(record.demographics).map(key => t(PATIENT_FIELDS[key]))
+  if (record.roseFlag == null) missing.push('Опросник симптомов не завершён')
+  const symptomsHTML = `<div class="section"><div class="section-title">Симптомы со слов пользователя</div>
+    ${record.symptoms?.length ? record.symptoms.map(({ question, answer }) => `<div class="kv"><span class="k">${escapeHTML(question)}</span><span class="v">${escapeHTML(answer)}</span></div>`).join('') : '<p>Ответы не сохранены. Отсутствие ответов не означает отсутствие симптомов.</p>'}
+    ${missing.length ? `<p class="rec">Недостаточно данных для оценки риска: ${missing.map(escapeHTML).join(', ')}. Пропущенные значения не заменяются нормальными.</p>` : ''}
+    </div>`
+
+  const mr = record.modelResult
+  const simulated = mr?.simulated || record.connMode === 'demo'
+  const poor = mr?.quality === 'poor' || mr?.class === 'NOISE' || mr?.labels?.includes('NOISE')
+  const qualityHTML = `<div class="section"><div class="section-title">Источник и качество записи</div>
+    <p>${simulated ? 'ДЕМОНСТРАЦИОННАЯ СИМУЛЯЦИЯ — не запись пациента.' : record.type === 'live' ? 'Цифровая запись из подключённого устройства.' : 'Изображение ЭКГ, загруженное пользователем. Параметры исходной регистрации не подтверждены.'}</p>
+    <p class="rec">${poor ? 'Модель отметила помехи: интерпретация ограничена, требуется повторная запись.' : 'Качество сигнала медицинским специалистом не подтверждено; отсутствие метки помех не гарантирует пригодность записи.'}</p>
+    <p class="rec">Пропуски отсчётов: ${record.type === 'live' ? escapeHTML(record.missingSamples ?? 'неизвестно') : 'нет данных'}. Частота: ${escapeHTML(record.sampleRateHz ?? mr?.sample_rate_hz ?? 'неизвестно')} Гц.
+    Сохранённые отведения: ${escapeHTML(record.leadLabels?.join(', ') || 'не указаны')}.
+    Анализ: ${escapeHTML(mr?.analysis_channel || 'отведения не указаны')}${mr?.window_seconds ? `; окно ${escapeHTML(mr.window_seconds)} с` : ''}.</p>
+    ${record.missingSamples > 0 ? '<p class="rec">В записи есть пропуски; требуется повторная регистрация для анализа.</p>' : ''}</div>`
+
+  const limitationsHTML = `<div class="section"><div class="section-title">Ограничения и дальнейшие действия</div>
+    <p>Исследовательский прототип. Результаты требуют проверки врачом и не устанавливают диагноз. Оценки модели не являются вероятностью заболевания или прогнозом смертности.</p>
+    <p class="rec">Для трёхканальной модели используются I, II и вычисляемое III; V1 не участвует в её анализе. Это не полная 12-канальная ЭКГ. Показанный ниже фрагмент автоматически масштабирован, без диагностической калибровки амплитуды и скорости.</p>
+    <p class="rec">Передайте врачу исходную запись и этот отчёт для сопоставления с симптомами и анамнезом. Нормальный результат модели не исключает заболевание. Срочность помощи нельзя определять только по этому отчёту.</p>
+    </div>`
+
+  const riskHTML = record.riskData && !missing.length ? `
     <div class="section">
       <div class="section-title">Оценка кардиологического риска</div>
       <div class="risk-badge" style="border-color:${riskColor}44;background:${riskColor}18">
-        <span class="risk-class" style="color:${riskColor}">${record.riskData.risk_class}</span>
-        <span class="risk-mort">10-летняя смертность: <b>${record.riskData.mortality_10y?.toFixed(1) ?? '?'}%</b></span>
+        <span class="risk-class" style="color:${riskColor}">${escapeHTML(record.riskData.risk_class)}</span>
+        <span class="risk-mort">Экспериментальная оценка</span>
       </div>
-      ${record.riskData.recommendation ? `<p class="rec">${record.riskData.recommendation}</p>` : ''}
+      <p class="rec">Модуль обучен на синтетических данных. Клиническая достоверность оценки не установлена; не использовать для выбора лечения или срочности помощи.</p>
     </div>` : ''
 
   const modelHTML = record.modelResult ? (() => {
@@ -89,18 +116,19 @@ function buildHTML(record, lang) {
     const col = CLASS_COLORS[mr.class] ?? '#6b7280'
     const bars = mr.all ? Object.entries(mr.all).sort(([,a],[,b]) => b-a).map(([cls, conf]) => `
       <div class="bar-row">
-        <span class="bar-label">${cls}</span>
+        <span class="bar-label">${escapeHTML(cls)}</span>
         <div class="bar-track"><div class="bar-fill" style="width:${(conf*100).toFixed(1)}%;background:${CLASS_COLORS[cls] ?? '#6b7280'}"></div></div>
         <span class="bar-pct">${(conf*100).toFixed(1)}%</span>
       </div>`).join('') : ''
     return `
     <div class="section">
-      <div class="section-title">Результат нейросети</div>
+      <div class="section-title">${mr.simulated ? 'Симуляция ЭКГ' : 'Результат нейросети'}</div>
       <div class="top-class" style="background:${col}18;border-color:${col}44">
-        <span style="color:${col};font-weight:700">${mr.class}</span>
-        <span style="color:#9ca3af;font-size:13px">${(mr.confidence * 100).toFixed(1)}%</span>
+        <span style="color:${col};font-weight:700">${escapeHTML((mr.labels?.length ? mr.labels : [mr.class || 'Uncertain']).map(label => CLASS_NAMES[label] || label).join('; '))}</span>
+        <span style="color:#6b7280;font-size:13px">${mr.simulated ? 'Симуляция' : 'Оценки модели'}</span>
       </div>
       <div class="bars">${bars}</div>
+      <p class="rec">Метки обозначают распознанные паттерны, а не подтверждённые диагнозы. Проценты — оценки модели, не вероятность болезни.</p>
     </div>`
   })() : ''
 
@@ -110,14 +138,14 @@ function buildHTML(record, lang) {
       <div class="bars">
         ${groupPreds(record.predictions).map(g => `
           <div class="bar-row">
-            <span class="bar-label">${g.cls}</span>
+            <span class="bar-label">${escapeHTML(g.cls)}</span>
             <div class="bar-track"><div class="bar-fill" style="width:${(g.max*100).toFixed(0)}%;background:#60a5fa"></div></div>
             <span class="bar-pct">${(g.max*100).toFixed(0)}%  ×${g.count}</span>
           </div>`).join('')}
       </div>
     </div>` : ''
 
-  const imageHTML = record.ecgImageBase64 ? `
+  const imageHTML = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=\s]+$/.test(record.ecgImageBase64 || '') ? `
     <div class="section">
       <div class="section-title">ЭКГ-снимок</div>
       <img src="${record.ecgImageBase64}" style="width:100%;border-radius:8px;border:1px solid #2d2d3a" />
@@ -131,8 +159,8 @@ function buildHTML(record, lang) {
 
   const summaryHTML = record.aiSummary ? `
     <div class="section">
-      <div class="section-title">Заключение ИИ</div>
-      <div class="summary-box">${record.aiSummary}</div>
+      <div class="section-title">Автоматическая сводка — требует проверки врачом</div>
+      <div class="summary-box">${escapeHTML(record.aiSummary)}</div>
     </div>` : ''
 
   const statsHTML = record.type === 'live' ? `
@@ -142,7 +170,7 @@ function buildHTML(record, lang) {
         ${fmtTime(record.duration) ? `<div class="kv"><span class="k">Длительность</span><span class="v">${fmtTime(record.duration)}</span></div>` : ''}
         ${record.sampleCount ? `<div class="kv"><span class="k">Образцов</span><span class="v">${record.sampleCount.toLocaleString()}</span></div>` : ''}
         ${record.heartRate ? `<div class="kv"><span class="k">ЧСС</span><span class="v">${record.heartRate} bpm</span></div>` : ''}
-        ${record.connMode ? `<div class="kv"><span class="k">Подключение</span><span class="v">${record.connMode.toUpperCase()}</span></div>` : ''}
+        ${record.connMode ? `<div class="kv"><span class="k">Подключение</span><span class="v">${escapeHTML(record.connMode.toUpperCase())}</span></div>` : ''}
       </div>
     </div>` : ''
 
@@ -281,10 +309,12 @@ function buildHTML(record, lang) {
   </div>
 
   <div class="content">
-    <div class="report-title">Отчёт кардиологического исследования</div>
+    <div class="report-title">CardioScan — отчёт для врача</div>
     <div class="report-sub">Сформировано автоматически · Только для информационных целей</div>
 
     ${demographicsHTML}
+    ${symptomsHTML}
+    ${qualityHTML}
     ${riskHTML}
     ${modelHTML}
     ${predsHTML}
@@ -292,6 +322,7 @@ function buildHTML(record, lang) {
     ${imageHTML}
     ${summaryHTML}
     ${statsHTML}
+    ${limitationsHTML}
   </div>
 
   <div class="footer">
@@ -303,56 +334,49 @@ function buildHTML(record, lang) {
 }
 
 export async function generatePDF(record, lang = 'ru') {
-  // Render HTML in a hidden off-screen iframe
   const iframe = document.createElement('iframe')
-  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1px;border:none;visibility:hidden'
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1px;border:none'
   document.body.appendChild(iframe)
-
-  const html = buildHTML(record, lang)
-  iframe.contentDocument.open()
-  iframe.contentDocument.write(html)
-  iframe.contentDocument.close()
-
-  // Wait for images to load
-  await new Promise(resolve => {
-    const imgs = iframe.contentDocument.querySelectorAll('img')
-    if (!imgs.length) return resolve()
-    let loaded = 0
-    imgs.forEach(img => {
-      if (img.complete) { loaded++; if (loaded === imgs.length) resolve() }
-      else { img.onload = img.onerror = () => { loaded++; if (loaded === imgs.length) resolve() } }
+  try {
+    const doc = iframe.contentDocument
+    doc.open(); doc.write(buildHTML(record, lang)); doc.close()
+    await Promise.all(Array.from(doc.images).map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+      img.onload = img.onerror = resolve
+    })))
+    await doc.fonts?.ready
+    const body = doc.body
+    const fullH = body.scrollHeight
+    iframe.style.height = fullH + 'px'
+    const blocks = Array.from(doc.querySelectorAll('.header, .report-title, .report-sub, .section, .footer'))
+    const canvas = await html2canvas(body, {
+      scale: 2, backgroundColor: '#ffffff', width: 794, height: fullH,
+      windowWidth: 794, windowHeight: fullH,
     })
-  })
-
-  // Small delay for SVG rendering
-  await new Promise(r => setTimeout(r, 200))
-
-  const body = iframe.contentDocument.body
-  const fullH = body.scrollHeight
-
-  iframe.style.height = fullH + 'px'
-
-  // Capture with html2canvas
-  const canvas = await html2canvas(body, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    width: 794,
-    height: fullH,
-    windowWidth: 794,
-    windowHeight: fullH,
-  })
-
-  document.body.removeChild(iframe)
-
-  // A4 dimensions in mm
-  const pdfW   = 210
-  const pdfH   = (fullH / 794) * pdfW
-  const pdf    = new jsPDF({ unit: 'mm', format: [pdfW, pdfH > 297 ? pdfH : 297] })
-  const imgData = canvas.toDataURL('image/jpeg', 0.95)
-  pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH)
-
-  const fname = `CardioScan_${new Date(record.timestamp).toISOString().slice(0, 10)}_${record.type}.pdf`
-  pdf.save(fname)
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+    const width = 190, pageBottom = 282
+    let y = 10
+    for (let i = 0; i < blocks.length; i++) {
+      const top = Math.floor(blocks[i].getBoundingClientRect().top * 2)
+      const bottom = Math.ceil((blocks[i + 1]?.getBoundingClientRect().top ?? fullH) * 2)
+      if (bottom <= top) continue
+      const slice = document.createElement('canvas')
+      slice.width = canvas.width; slice.height = bottom - top
+      slice.getContext('2d').drawImage(canvas, 0, top, canvas.width, bottom - top, 0, 0, canvas.width, bottom - top)
+      let h = slice.height / slice.width * width
+      const ratio = Math.min(1, (pageBottom - 10) / h)
+      h *= ratio
+      if (y + h > pageBottom && y > 10) { pdf.addPage(); y = 10 }
+      pdf.addImage(slice.toDataURL('image/png'), 'PNG', 10, y, width * ratio, h)
+      y += h
+    }
+    const total = pdf.getNumberOfPages()
+    for (let page = 1; page <= total; page++) {
+      pdf.setPage(page); pdf.setFontSize(9); pdf.setTextColor(110)
+      pdf.text('CardioScan | ' + page + ' / ' + total, 200, 290, { align: 'right' })
+    }
+    const fname = 'CardioScan_' + new Date(record.timestamp).toISOString().slice(0, 10) + '_' + record.type + '.pdf'
+    pdf.save(fname)
+  } finally {
+    iframe.remove()
+  }
 }

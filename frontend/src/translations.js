@@ -667,4 +667,11 @@ for (const lang of ['ru', 'en', 'kz']) {
   })
 }
 
+const patientCopy = {
+  ru: { sqUnknown: 'Не знаю / не измерял(а)', sqDataHelp: 'Укажите только известные данные. Пустые поля сохраняются как неизвестные.', sqIncomplete: 'Недостаточно данных для оценки риска', sqIncompleteHelp: 'Оценка риска не рассчитывается. Доступные данные сохранятся в отчёте.' },
+  en: { sqUnknown: 'Unknown / not measured', sqDataHelp: 'Enter only known values. Empty fields remain unknown.', sqIncomplete: 'Missing information for risk assessment', sqIncompleteHelp: 'Risk is not calculated. Available information will be saved in the report.' },
+  kz: { sqUnknown: 'Білмеймін / өлшенбеген', sqDataHelp: 'Тек белгілі деректерді енгізіңіз. Бос өрістер белгісіз болып сақталады.', sqIncomplete: 'Қауіпті бағалауға деректер жеткіліксіз', sqIncompleteHelp: 'Қауіп есептелмейді. Қолда бар деректер есепте сақталады.' },
+}
+for (const lang of Object.keys(patientCopy)) Object.assign(translations[lang], patientCopy[lang])
+
 export default translations

@@ -13,6 +13,7 @@ jest.mock('../store/useHistoryStore', () => {
 })
 jest.mock('../services/historyDB', () => ({ saveRecord: jest.fn() }))
 jest.mock('./MonitorPanel', () => props => <div>
+  <button onClick={() => props.changeMode('wifi')}>WiFi</button>
   <button onClick={props.start} disabled={!props.canStart}>Start</button>
   <button onClick={props.stop}>Stop</button>
   <span data-testid="status">{props.status}</span>
@@ -33,6 +34,7 @@ afterEach(() => { jest.useRealTimers(); delete global.fetch })
 
 test.each(['stop', 'device', 'server'])('records beyond ten seconds and saves all four leads once on %s', async ending => {
   render(<EcgRealtime />)
+  fireEvent.click(screen.getByText('WiFi'))
   act(() => mockHandlers.connect())
   fireEvent.click(screen.getByText('Start'))
   const frames = Array.from({ length: 3000 }, (_, i) => ({
@@ -65,4 +67,28 @@ test.each(['stop', 'device', 'server'])('records beyond ten seconds and saves al
   expect(payload.channels[0]).toHaveLength(1101)
   expect(payload.timing).toHaveLength(1101)
   expect(screen.getByTestId('status')).toHaveTextContent('done')
+})
+
+test('simulation starts offline, ignores device events and saves its provenance', async () => {
+  render(<EcgRealtime />)
+  fireEvent.click(screen.getByText('Start'))
+  act(() => {
+    jest.advanceTimersByTime(2000)
+    mockHandlers.disconnect()
+    mockHandlers.ecg_error({ error: 'offline' })
+    mockHandlers.ecg_frames({ frames: [{ channels: [999, 999, 999, 999] }] })
+    mockHandlers.ecg_analysis({ class: 'Noise' })
+  })
+  expect(screen.getByTestId('status')).toHaveTextContent('scanning')
+  expect(screen.getByTestId('count')).toHaveTextContent('501')
+  expect(screen.getByText('Норма · симуляция')).toBeInTheDocument()
+  await act(async () => fireEvent.click(screen.getByText('Stop')))
+  const record = mockAdd.mock.calls[0][0]
+  expect(record.modelResult.simulated).toBe(true)
+  expect(record.ecgChannels).toHaveLength(4)
+  expect(record.ecgChannels[1].every(v => Math.abs(v) < 1.3)).toBe(true)
+  expect(record.ecgChannels[2]).toEqual(record.ecgChannels[1].map((v, i) => v - record.ecgChannels[0][i]))
+  expect(global.fetch).not.toHaveBeenCalled()
+  act(() => jest.advanceTimersByTime(2000))
+  expect(screen.getByTestId('count')).toHaveTextContent('501')
 })

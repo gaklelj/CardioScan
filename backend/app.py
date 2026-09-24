@@ -285,15 +285,26 @@ def risk_assessment():
             prob_cd   /= ecg_sum
 
         # Demographics
-        demo = body.get('demographics', {})
-        age         = int(demo.get('age', 45))
-        sex         = int(demo.get('sex', 0))
-        sbp         = float(demo.get('sbp', 120))
-        cholesterol = float(demo.get('cholesterol', 5.0))
-        smoking     = int(demo.get('smoking', 0))
-
-        # Rose questionnaire
-        rose_flag = int(body.get('rose_flag', 0))
+        demo = body.get('demographics') or {}
+        required = ('age', 'sex', 'sbp', 'cholesterol', 'smoking')
+        missing = [key for key in required if demo.get(key) in (None, '')]
+        if body.get('rose_flag') in (None, ''):
+            missing.append('rose_flag')
+        if missing:
+            return jsonify({'status': 'insufficient_data', 'missing_fields': missing}), 422
+        try:
+            values = {key: float(demo[key]) for key in required}
+            rose_flag = float(body['rose_flag'])
+            bounds = {'age': (18, 100), 'sbp': (50, 300), 'cholesterol': (0.1, 30)}
+            if any(not lo <= values[key] <= hi for key, (lo, hi) in bounds.items()):
+                raise ValueError('Patient data outside supported range')
+            if values['age'] % 1 or values['sbp'] % 1 or any(values[key] not in (0, 1) for key in ('sex', 'smoking')) or rose_flag not in (0, 1):
+                raise ValueError('Invalid patient data')
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid patient data'}), 400
+        age, sex = int(values['age']), int(values['sex'])
+        sbp, cholesterol = values['sbp'], values['cholesterol']
+        smoking, rose_flag = int(values['smoking']), int(rose_flag)
 
         result = _predict_risk(
             prob_norm=prob_norm, prob_sttc=prob_sttc, prob_mi=prob_mi,

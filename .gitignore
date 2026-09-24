@@ -32,4 +32,8 @@ npm-debug.log*
 .claude
 
 backend.exe
-data/
+data/DESTINATION/
+data/raw/
+data/WFDB_ChapmanShaoxing/
+tmp/
+data/training_ads1293/

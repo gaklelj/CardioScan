@@ -57,9 +57,9 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
         }
         ctx.fillStyle = colors[row]
         ctx.font = '600 18px Inter, sans-serif'
-        ctx.fillText(mode === 'wifi' ? ['I', 'II', 'III', 'V1'][row] : `CH${row + 1}`, 16, top + 35)
+        ctx.fillText(mode !== 'usb' ? ['I', 'II', 'III', 'V1'][row] : `CH${row + 1}`, 16, top + 35)
         ctx.font = '10px Inter, sans-serif'
-        if (row === 2 && mode === 'wifi') ctx.fillText('II − I', 12, top + 53)
+        if (row === 2 && mode !== 'usb') ctx.fillText('II − I', 12, top + 53)
         const values = view.series[row] ?? []
         if (!values.length) {
           ctx.fillStyle = theme === 'light' ? '#654d55' : '#c2a5ae'
@@ -96,7 +96,7 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
 
   return <section className="scope-card" aria-label={c.chart}>
     <header className="scope-heading">
-      <div><span className="eyebrow">ADS1293 · ECG</span><h2>{c.chart}</h2></div>
+      <div><span className="eyebrow">{mode === 'demo' ? 'Симуляция · ECG' : 'ADS1293 · ECG'}</span><h2>{c.chart}</h2></div>
       <span className={`status-pill ${status === 'scanning' ? 'is-active' : ''}`}><span className="status-dot" />{status === 'scanning' ? c.receiving : status === 'done' ? c.finished : c.waiting}</span>
     </header>
     <div className="scope-toolbar">
@@ -110,6 +110,6 @@ export default function EcgScope({ recordingRef, timingRef, status, mode, sample
     </div>
     <canvas ref={canvasRef} className="ecg-scope-canvas" role="img" aria-label={`${c.chart}: I, II, III, V1. ${c.raw}`} />
     {!sampleCount && <div className="scope-empty"><Activity size={15} />{c.empty}</div>}
-    <footer className="scope-footer"><span>{frozenAt !== null && status === 'scanning' ? c.frozen : c.raw}</span><span>I · II · III · V1</span></footer>
+    <footer className="scope-footer"><span>{frozenAt !== null && status === 'scanning' ? c.frozen : mode === 'demo' ? 'Симуляция ЭКГ · 72 уд/мин' : c.raw}</span><span>I · II · III · V1</span></footer>
   </section>
 }

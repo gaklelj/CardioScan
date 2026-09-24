@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { saveRecord, getAllRecords, deleteRecord, clearAllRecords } from '../services/historyDB'
 
-export function buildRecord({ type, ecgImageBase64, ecgPoints, ecgChannels, ecgTiming, sampleRateHz, missingSamples, leadLabels, predictions, modelResult, aiSummary, riskData, demographics, duration, sampleCount, heartRate, connMode }) {
+export function buildRecord({ type, ecgImageBase64, ecgPoints, ecgChannels, ecgTiming, sampleRateHz, missingSamples, leadLabels, predictions, modelResult, aiSummary, riskData, demographics, symptoms, roseFlag, questionnaireVersion, duration, sampleCount, heartRate, connMode }) {
   return {
     id:              crypto.randomUUID(),
     timestamp:       Date.now(),
@@ -18,6 +18,9 @@ export function buildRecord({ type, ecgImageBase64, ecgPoints, ecgChannels, ecgT
     aiSummary:       aiSummary       ?? null,
     riskData:        riskData        ?? null,
     demographics:    demographics    ?? null,
+    symptoms: symptoms ?? [],
+    roseFlag: roseFlag ?? null,
+    questionnaireVersion: questionnaireVersion ?? null,
     duration:        duration        ?? null,
     sampleCount:     sampleCount     ?? null,
     heartRate:       heartRate       ?? null,

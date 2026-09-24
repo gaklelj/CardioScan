@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { UploadCloud, Link as LinkIcon, ImageIcon, Code2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
+import PatientDataStatus from './PatientDataStatus'
+import { canAssessRisk } from '../services/patientData'
 import RiskAssessmentCard from './RiskAssessmentCard'
 import useHistoryStore from '../store/useHistoryStore'
 
@@ -283,11 +285,15 @@ export default function ImageUpload({ anthropicKey }) {
   const [riskLoading, setRiskLoading]   = useState(false)
   const fileRef   = useRef(null)
   const historyId = useRef(null)   // id записи текущего исследования
+  const [historyVersion, setHistoryVersion] = useState(0)
   const { add: addToHistory } = useHistoryStore()
 
   // Fetch risk assessment when both symptoms + predictions are available
   useEffect(() => {
-    if (!symptoms?.demographics || !result?.predictions?.length) return
+    setRiskData(null)
+    setRiskLoading(false)
+    if (!canAssessRisk(symptoms) || !result?.predictions?.length) return
+    const controller = new AbortController()
     setRiskLoading(true)
     // Build ECG probabilities from YOLO predictions (class → max confidence)
     const ecg = {}
@@ -297,30 +303,32 @@ export default function ImageUpload({ anthropicKey }) {
     }
     fetch(`${BACKEND}/api/risk-assessment`, {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ecg_probabilities: ecg,
         demographics: symptoms.demographics,
-        rose_flag: symptoms.roseFlag ?? 0,
+        rose_flag: symptoms.roseFlag,
       }),
     })
       .then(r => r.json())
       .then(data => { if (data.risk_class) setRiskData(data); else setRiskLoading(false) })
       .catch(() => setRiskLoading(false))
       .finally(() => setRiskLoading(false))
+    return () => controller.abort()
   }, [symptoms, result]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save / update history record when riskData arrives
   useEffect(() => {
-    if (!riskData || !historyId.current) return
+    if (!symptoms || !historyId.current) return
     // Update existing record with riskData + demographics
     const store = useHistoryStore.getState()
     const rec = store.records.find(r => r.id === historyId.current)
     if (!rec) return
-    const updated = { ...rec, riskData, demographics: symptoms?.demographics ?? null }
+    const updated = { ...rec, riskData, demographics: symptoms.demographics, symptoms: symptoms.readable, roseFlag: symptoms.roseFlag, questionnaireVersion: 2 }
     import('../services/historyDB').then(({ saveRecord }) => saveRecord(updated))
     useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
-  }, [riskData]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [riskData, symptoms, historyVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update history record when aiSummary arrives
   useEffect(() => {
@@ -357,6 +365,8 @@ export default function ImageUpload({ anthropicKey }) {
     setErrorKey(null); setErrorDetail(null); setResult(null); setLoading(true)
     setAiReport(null); setAiReportLoading(false); setAiReportError(null)
     setG4fSummary(null); setG4fLoading(false); setG4fError(null)
+    historyId.current = null
+    setRiskData(null); setRiskLoading(false)
     setSymptoms(null); setShowSymptoms(true)
     try {
       let base64data = ''
@@ -393,10 +403,11 @@ export default function ImageUpload({ anthropicKey }) {
       historyId.current = null
       const rec = await addToHistory({
         type:            'upload',
-        ecgImageBase64:  imgDataUrl,
+        ecgImageBase64:  imgDataUrl || `data:image/jpeg;base64,${base64data}`,
         predictions:     preds,
       })
       historyId.current = rec.id
+      setHistoryVersion(v => v + 1)
 
       setLoading(false)
       fetchAiReport(preds)
@@ -590,6 +601,7 @@ export default function ImageUpload({ anthropicKey }) {
 
       {/* Оценка кардиологического риска */}
       <RiskAssessmentCard riskData={riskData} loading={riskLoading} t={t} />
+      <PatientDataStatus questionnaire={symptoms} t={t} />
 
       {/* Result */}
       {result && (
@@ -802,7 +814,6 @@ export default function ImageUpload({ anthropicKey }) {
         onClose={() => setShowSymptoms(false)}
         onSubmit={(data) => {
           setSymptoms(data)
-          if (data.demographics) setRiskLoading(true)
         }}
         t={t}
       />
