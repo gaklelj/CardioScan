@@ -1,4 +1,5 @@
 import os
+from ecg_protocol import normalize_sample as _normalize_sample, parse_sample_line as _parse_sample_line, validate_channels, parse_tcp_frame
 import io
 import re
 import base64
@@ -25,29 +26,36 @@ logging.getLogger('engineio').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 
 # ── Keras model ───────────────────────────────────────────────────────────────
-import tensorflow as tf
-
 _model_dir = os.environ.get('MODEL_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model'))
 MODEL_PATH = os.path.join(_model_dir, 'best_ecg_model.h5')
+from ecg_inference import ThreeLeadPredictor
+_three_path = os.environ.get('ECG_THREE_LEAD_MODEL', os.path.join(_model_dir, 'ecg_ads1293.pt'))
+_three_model = ThreeLeadPredictor(_three_path) if os.path.exists(_three_path) else None
+log.info('Three-lead ECG model: %s', _three_path if _three_model else 'unavailable')
 _expected_len = 1000
 
+_model = None
 if os.path.exists(MODEL_PATH):
-    _model = tf.keras.models.load_model(MODEL_PATH)
-    _expected_len = _model.input_shape[1]
-    log.info('Keras model loaded | input shape: %s', _model.input_shape)
-    _dummy = np.zeros((1, _expected_len, 1), dtype=np.float32)
-    _model(_dummy, training=False)
-    log.info('Model warmed up')
-else:
-    _model = None
-    log.warning('Keras model not found at %s — /points inference disabled', MODEL_PATH)
+    try:
+        import tensorflow as tf
+        _model = tf.keras.models.load_model(MODEL_PATH)
+        _expected_len = _model.input_shape[1]
+        _model(np.zeros((1, _expected_len, 1), dtype=np.float32), training=False)
+        log.info('Legacy Keras model loaded')
+    except Exception as exc:
+        _model = None
+        log.warning('Legacy single-lead model unavailable: %s', exc)
 
 # ── YOLO model ────────────────────────────────────────────────────────────────
-from ultralytics import YOLO as _YOLO
-
 _YOLO_PATH = os.path.join(_model_dir, 'best.pt')
-_yolo_model = _YOLO(_YOLO_PATH)
-log.info('YOLO model loaded: %s', _YOLO_PATH)
+_yolo_model = None
+try:
+    from ultralytics import YOLO as _YOLO
+    if os.path.exists(_YOLO_PATH):
+        _yolo_model = _YOLO(_YOLO_PATH)
+        log.info('YOLO model loaded: %s', _YOLO_PATH)
+except ImportError as exc:
+    log.warning('Image model unavailable: %s', exc)
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -78,6 +86,7 @@ ECG_CLASSES = ['CD', 'HYP', 'MI', 'STTC', 'NORM', 'NOISE']
 def run_model(ecg_points: list) -> dict:
     if _model is None:
         raise RuntimeError('Keras model not available')
+    ecg_points = validate_channels([ecg_points])[0]
     arr = np.array(ecg_points, dtype=np.float32)
 
     mean, std = arr.mean(), arr.std()
@@ -100,10 +109,24 @@ def run_model(ecg_points: list) -> dict:
         'class': top_class if top_conf >= 0.50 else 'Uncertain',
         'confidence': top_conf,
         'all': result,
+        'analysis_channel': 'CH1',
     }
 
 
+def analyze_channels(channels, metadata=None):
+    channels = validate_channels(channels)
+    if len(channels) == 1:
+        return run_model(channels[0])
+    if _three_model is None:
+        raise RuntimeError('Three-lead model is unavailable')
+    metadata = metadata or {}
+    return _three_model.analyze(channels[:3], metadata.get('sample_rate_hz'),
+                                metadata.get('timing'), metadata.get('missing_samples', 0))
+
+
 def _yolo_predict(img: Image.Image, confidence: float, overlap: float):
+    if _yolo_model is None:
+        raise RuntimeError('Image model is unavailable; install ultralytics and provide best.pt')
     return _yolo_model.predict(source=img, conf=confidence, iou=overlap, imgsz=640, verbose=False)[0]
 
 
@@ -180,13 +203,22 @@ def analyze_local_yolo(image_bytes: bytes, confidence: float = 0.20, fmt: str = 
 # ── REST API ──────────────────────────────────────────────────────────────────
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'model': 'best.pt', 'keras': _model is not None})
+    return jsonify({'status': 'ok', 'model': 'best.pt', 'keras': _model is not None,
+                    'yolo': _yolo_model is not None,
+                    'three_lead': _three_model is not None, 'ecg_model': 'ecg_ads1293' if _three_model else None})
 
 
 @app.route('/api/ecg/analyze', methods=['POST'])
 def ecg_analyze():
     try:
         body = request.get_json(silent=True) or {}
+
+        if 'channels' in body:
+            channels = validate_channels(body['channels'])
+            result = analyze_channels(channels, body)
+            result['channels'] = len(channels)
+            log.info('Local model result: %s (%.2f), channels=%s', result['class'], result['confidence'], result['channels'])
+            return jsonify(result)
 
         if 'points' in body:
             result = run_model(body['points'])
@@ -211,6 +243,8 @@ def ecg_analyze():
             return Response(data, content_type=content_type)
         return jsonify(data)
 
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         log.error('Analysis error: %s', e)
         return jsonify({'error': str(e)}), 500
@@ -467,7 +501,7 @@ def ecg_summary():
         return jsonify({'error': str(e)}), 500
 
 
-# ── Serial / Bluetooth ECG device ─────────────────────────────────────────────
+# ── Serial / WiFi ECG device ─────────────────────────────────────────────
 import serial
 import serial.tools.list_ports
 import threading
@@ -478,9 +512,8 @@ _serial_port  = None
 _ecg_owner_sid = None  # socket id, который запустил сканирование
 
 USB_KEYWORDS  = ['CP210', 'CH340', 'FTDI', 'usbserial', 'usbmodem', 'USB']
-BT_BLACKLIST  = ['Bluetooth-Incoming-Port', 'debug-console']
 ESP32_WIFI_HOST = '192.168.4.1'   # дефолтный IP точки доступа ESP32
-ESP32_WIFI_PORT = 81              # WebSocket порт
+ESP32_WIFI_PORT = 3333            # TCP CSV stream
 
 def _find_usb_port():
     ports = serial.tools.list_ports.comports()
@@ -490,27 +523,27 @@ def _find_usb_port():
             return p.device
     return None
 
-def _find_bt_port():
-    ports = serial.tools.list_ports.comports()
-    for p in ports:
-        if any(b in p.name for b in BT_BLACKLIST):
-            continue
-        if 'cu.' in p.name and len(p.name) > 10:
-            return p.device
-    return None
+ECG_CHANNELS = 4
 
-def _emit_ecg_point(value):
+
+def _emit_ecg_point(sample):
     global ecg_buffer
-    socketio.emit('ecg_point', {'value': value})
-    ecg_buffer.append(value)
-    if len(ecg_buffer) >= BUFFER_SIZE:
+    channels = _normalize_sample(sample)
+    metadata = sample if isinstance(sample, dict) else {}
+    socketio.emit('ecg_point', {**metadata, 'value': channels[0], 'channels': channels})
+    for index, value in enumerate(channels):
+        ecg_buffer[index].append(value)
+    if len(ecg_buffer[0]) >= BUFFER_SIZE and len(channels) == 1:
         try:
-            result = run_model(ecg_buffer[-BUFFER_SIZE:])
+            result = run_model(ecg_buffer[0][-BUFFER_SIZE:])
             socketio.emit('ecg_analysis', result)
             log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
             log.error('Live analysis error: %s', e)
-        ecg_buffer = []
+        ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
+    elif len(channels) >= 3:
+        # Three-lead recordings are analyzed by REST with acquisition timing.
+        ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
 
 def _serial_reader(port_name, baud=115200):
     global _ecg_running, _serial_port
@@ -530,7 +563,7 @@ def _serial_reader(port_name, baud=115200):
                 line = _serial_port.readline().decode('utf-8', errors='ignore').strip()
                 if not line:
                     continue
-                _emit_ecg_point(int(float(line) * 1000) if '.' in line else int(line))
+                _emit_ecg_point(parse_tcp_frame(line) if len(line.split(',')) in (6, 7) else _parse_sample_line(line))
             except ValueError:
                 pass
             except Exception as e:
@@ -545,37 +578,74 @@ def _serial_reader(port_name, baud=115200):
                 _serial_port.close()
         except Exception:
             pass
+        _ecg_running = False
+        socketio.emit('device_status', {'connected': False}, to=_ecg_owner_sid)
         log.info('Serial closed')
 
 def _wifi_reader(host=ESP32_WIFI_HOST, port=ESP32_WIFI_PORT):
     global _ecg_running
-    import websocket as _ws
-    url = f'ws://{host}:{port}'
-    log.info('WiFi WebSocket connecting: %s', url)
+    import socket
+    pending = ''
+    previous = None
+    missing = 0
+    rate_start = None
+    sample_rate = None
+    idle_reads = 0
     try:
-        ws = _ws.create_connection(url, timeout=5)
-        socketio.emit('device_status', {'connected': True, 'port': f'WiFi {host}'})
-        log.info('WiFi WebSocket connected')
-        while _ecg_running:
-            try:
-                msg = ws.recv()
-                if msg:
-                    s = msg.strip()
-                    _emit_ecg_point(int(float(s) * 1000) if '.' in s else int(s))
-            except ValueError:
-                pass
-        ws.close()
-    except Exception as e:
-        log.error('WiFi read error: %s', e)
-        socketio.emit('device_status', {'connected': False, 'error': str(e)})
+        with socket.create_connection((host, port), timeout=5) as connection:
+            connection.settimeout(1)
+            socketio.emit('device_status', {'connected': True, 'port': f'TCP {host}:{port}'})
+            while _ecg_running:
+                try:
+                    chunk = connection.recv(65536)
+                except socket.timeout:
+                    idle_reads += 1
+                    if idle_reads >= 5:
+                        raise ConnectionError('No data from ESP32 for 5 seconds')
+                    continue
+                idle_reads = 0
+                if not chunk:
+                    raise ConnectionError('ESP32 closed the TCP connection')
+                pending += chunk.decode('ascii', errors='replace')
+                lines = pending.split('\n')
+                pending = lines.pop()
+                if len(pending) > 4096:
+                    raise ValueError('TCP frame exceeds maximum length')
+                frames = []
+                for line in lines:
+                    try:
+                        frame = parse_tcp_frame(line)
+                    except ValueError:
+                        continue
+                    if previous is not None:
+                        delta = (frame['sequence'] - previous) & 0xFFFFFFFF
+                        if 1 < delta < 0x80000000:
+                            missing += delta - 1
+                    previous = frame['sequence']
+                    if rate_start is None:
+                        rate_start = (frame['timestamp_us'], frame['sequence'])
+                    elapsed = frame['timestamp_us'] - rate_start[0]
+                    if elapsed >= 1000000:
+                        sample_rate = round(((frame['sequence'] - rate_start[1]) & 0xFFFFFFFF) * 1000000 / elapsed, 1)
+                        rate_start = (frame['timestamp_us'], frame['sequence'])
+                    frames.append(frame)
+                if frames and _ecg_running:
+                    socketio.emit('ecg_frames', {'frames': frames, 'sample_rate_hz': sample_rate,
+                                               'missing_samples': missing}, to=_ecg_owner_sid)
+    except Exception as exc:
+        log.error('TCP ECG read error: %s', exc)
+        socketio.emit('ecg_error', {'error': str(exc)}, to=_ecg_owner_sid)
     finally:
-        socketio.emit('device_status', {'connected': False})
-        log.info('WiFi closed')
+        _ecg_running = False
+        socketio.emit('device_status', {'connected': False}, to=_ecg_owner_sid)
 
 
 @socketio.on('check_ecg_device')
 def handle_check_device(data=None):
     mode = (data or {}).get('mode', 'usb')
+    if mode not in ('usb', 'wifi'):
+        emit('ecg_error', {'error': 'Unsupported connection mode'})
+        return
     if mode == 'wifi':
         import socket as _sock
         try:
@@ -584,9 +654,6 @@ def handle_check_device(data=None):
             emit('device_status', {'connected': True, 'port': f'WiFi {ESP32_WIFI_HOST}'})
         except Exception:
             emit('device_status', {'connected': False})
-    elif mode == 'bt':
-        port = _find_bt_port()
-        emit('device_status', {'connected': bool(port), 'port': port or ''})
     else:
         port = _find_usb_port()
         emit('device_status', {'connected': bool(port), 'port': port or ''})
@@ -594,22 +661,19 @@ def handle_check_device(data=None):
 
 @socketio.on('start_ecg')
 def handle_start_ecg(data=None):
-    global _ecg_thread, _ecg_running, _ecg_owner_sid
+    global _ecg_thread, _ecg_running, _ecg_owner_sid, ecg_buffer
     if _ecg_thread and _ecg_thread.is_alive():
         return
     mode = (data or {}).get('mode', 'usb')
+    if mode not in ('usb', 'wifi'):
+        emit('ecg_error', {'error': 'Unsupported connection mode'})
+        return
+    ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
     _ecg_running = True
     _ecg_owner_sid = request.sid
     log.info('ECG started by sid=%s mode=%s', request.sid, mode)
     if mode == 'wifi':
         _ecg_thread = threading.Thread(target=_wifi_reader, daemon=True)
-    elif mode == 'bt':
-        port = _find_bt_port()
-        if not port:
-            emit('device_status', {'connected': False})
-            _ecg_running = False
-            return
-        _ecg_thread = threading.Thread(target=_serial_reader, args=(port,), daemon=True)
     else:
         port = _find_usb_port()
         if not port:
@@ -631,35 +695,57 @@ def handle_stop_ecg():
     _ecg_owner_sid = None
 
 
+@socketio.on('disconnect')
+def handle_ecg_disconnect(reason=None):
+    global _ecg_running
+    if request.sid == _ecg_owner_sid:
+        _ecg_running = False
+
+
 # ── WebSocket — лайв-стриминг ─────────────────────────────────────────────────
-ecg_buffer = []
+ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
 BUFFER_SIZE = _expected_len
 
 
 @socketio.on('ecg_data')
 def handle_ecg_data(data):
     global ecg_buffer
-    ecg_buffer.append(data['value'])
+    try:
+        channels = _normalize_sample(data)
+    except ValueError as exc:
+        emit('ecg_error', {'error': str(exc)})
+        return
+    data = {**data, 'value': channels[0], 'channels': channels}
+    for index, value in enumerate(channels):
+        ecg_buffer[index].append(value)
     emit('ecg_point', data, broadcast=True)
 
-    if len(ecg_buffer) >= BUFFER_SIZE:
+    if len(ecg_buffer[0]) >= BUFFER_SIZE and len(channels) == 1:
         try:
-            result = run_model(ecg_buffer[-BUFFER_SIZE:])
+            result = run_model(ecg_buffer[0][-BUFFER_SIZE:])
             emit('ecg_analysis', result, broadcast=True)
             log.info('Live analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:
             log.error('Live analysis error: %s', e)
-        ecg_buffer = []
+        ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
+    elif len(channels) >= 3:
+        ecg_buffer = [[] for _ in range(ECG_CHANNELS)]
 
 
 @socketio.on('ecg_batch')
 def handle_ecg_batch(data):
-    points = data.get('points', [])
+    try:
+        channels = validate_channels(data['channels'] if 'channels' in data else [data.get('points', [])])
+    except (ValueError, TypeError) as exc:
+        emit('ecg_error', {'error': str(exc)})
+        return
+    points = channels[0]
+    data = {**data, 'channels': channels}
     emit('ecg_batch', data, broadcast=True)
 
     if points:
         try:
-            result = run_model(points)
+            result = analyze_channels(channels, data)
             emit('ecg_analysis', result, broadcast=True)
             log.info('Batch analysis: %s (%.2f)', result['class'], result['confidence'])
         except Exception as e:

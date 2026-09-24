@@ -1,6 +1,10 @@
+import { parseEcgSample } from '../services/ecgProtocol'
+import { analysisWindow } from '../services/ecgRecording'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { io } from 'socket.io-client'
-import { Play, Square, Activity, Cpu, Usb, Bluetooth, Wifi, CloudOff, Upload } from 'lucide-react'
+import { CloudOff, Upload } from 'lucide-react'
+import EcgScope from './EcgScope'
+import MonitorPanel from './MonitorPanel'
 import { useLanguage } from '../LanguageContext'
 import SymptomsModal, { SymptomsCard } from './SymptomsModal'
 import RiskAssessmentCard from './RiskAssessmentCard'
@@ -18,9 +22,7 @@ const ANALYZE_URL = isMobileDevice
   ? 'http://localhost:6767/api/ecg/analyze'
   : 'http://localhost:6767/api/ecg/analyze'
 const OFFLINE_KEY = 'ecg_offline_buffer'
-const MAX_POINTS  = 500
-const CANVAS_W    = 800
-const CANVAS_H    = 200
+const CHANNEL_COUNT = 4
 
 const CLASS_COLORS = {
   'Normal':              '#22c55e',
@@ -31,20 +33,18 @@ const CLASS_COLORS = {
   'Noise':               '#6b7280',
 }
 
-const CONN_MODES = [
-  { id: 'usb',  label: 'USB',       Icon: Usb       },
-  { id: 'bt',   label: 'Bluetooth', Icon: Bluetooth },
-  { id: 'wifi', label: 'WiFi',      Icon: Wifi      },
-]
-
 export default function EcgRealtime() {
   const { t } = useLanguage()
 
-  const [connMode,        setConnMode]        = useState('usb')
+  const [connMode,        setConnMode]        = useState('wifi')
   const [serverOnline,    setServerOnline]    = useState(false)
   const [deviceConnected, setDeviceConnected] = useState(false)
   const [deviceInfo,      setDeviceInfo]      = useState(null)
   const [scanStatus,      setScanStatus]      = useState('idle')
+  const [streamInfo, setStreamInfo] = useState(null)
+  const [streamError, setStreamError] = useState('')
+  const timingRef = useRef([])
+  const streamInfoRef = useRef(null)
   const [duration,        setDuration]        = useState(0)
   const [sampleCount,     setSampleCount]     = useState(0)
   const [heartRate,       setHeartRate]       = useState(null)
@@ -69,7 +69,7 @@ export default function EcgRealtime() {
     const store = useHistoryStore.getState()
     const rec = store.records.find(r => r.id === historyId.current)
     if (!rec) return
-    const updated = { ...rec, modelResult: aiResult, duration }
+    const updated = { ...rec, modelResult: aiResult }
     saveRecord(updated)
     useHistoryStore.setState(s => ({ records: s.records.map(r => r.id === historyId.current ? updated : r) }))
   }, [aiResult]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,7 +87,7 @@ export default function EcgRealtime() {
 
   // Fetch risk assessment when both symptoms + ECG result are available
   useEffect(() => {
-    if (!symptoms?.demographics || !aiResult?.all) return
+    if (!symptoms?.demographics || !aiResult?.all || aiResult.model === 'ecg_ads1293') return
     setRiskLoading(true)
     const ecg = aiResult.all
     fetch(`${BACKEND}/api/risk-assessment`, {
@@ -105,75 +105,16 @@ export default function EcgRealtime() {
       .finally(() => setRiskLoading(false))
   }, [symptoms, aiResult])
 
-  const canvasRef     = useRef(null)
   const socketRef     = useRef(null)
-  const dataBufferRef = useRef([])
-  const animFrameRef  = useRef(null)
+  const recordingRef = useRef([[], [], [], []])
   const scanStatusRef = useRef('idle')
   const timerRef      = useRef(null)
-  const connModeRef   = useRef('usb')
+  const connModeRef   = useRef('wifi')
+  const stopScanRef = useRef(null)
+  const startedAtRef = useRef(null)
 
   /* ─── Canvas ────────────────────────────────────────────────────── */
-  const drawChart = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    const W = CANVAS_W, H = CANVAS_H
-    const buf = dataBufferRef.current
-
-    ctx.fillStyle = '#0c0c0c'
-    ctx.fillRect(0, 0, W, H)
-
-    ctx.strokeStyle = 'rgba(220,60,60,0.08)'
-    ctx.lineWidth = 1
-    const cols = 20, rows = 8
-    for (let i = 0; i <= cols; i++) {
-      ctx.beginPath(); ctx.moveTo((W / cols) * i, 0); ctx.lineTo((W / cols) * i, H); ctx.stroke()
-    }
-    for (let i = 0; i <= rows; i++) {
-      ctx.beginPath(); ctx.moveTo(0, (H / rows) * i); ctx.lineTo(W, (H / rows) * i); ctx.stroke()
-    }
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)'
-    ctx.lineWidth = 1
-    ctx.setLineDash([6, 6])
-    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke()
-    ctx.setLineDash([])
-
-    if (buf.length >= 2) {
-      const isScanning = scanStatusRef.current === 'scanning'
-      const visible = buf.slice(-MAX_POINTS)
-      const min = Math.min(...visible)
-      const max = Math.max(...visible)
-      const range = (max - min) || 1
-      const pad = H * 0.12
-      const xStep = W / (MAX_POINTS - 1)
-
-      ctx.strokeStyle = isScanning ? '#22c55e' : '#3a3a3a'
-      ctx.lineWidth = 1.5
-      ctx.lineJoin = 'round'
-      ctx.lineCap = 'round'
-      ctx.shadowColor = isScanning ? 'rgba(34,197,94,0.35)' : 'transparent'
-      ctx.shadowBlur = isScanning ? 8 : 0
-      ctx.beginPath()
-      for (let i = 0; i < visible.length; i++) {
-        const x = i * xStep
-        const y = H - pad - ((visible[i] - min) / range) * (H - 2 * pad)
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-      }
-      ctx.stroke()
-      ctx.shadowBlur = 0
-    }
-
-    animFrameRef.current = requestAnimationFrame(drawChart)
-  }, [])
-
-  /* ─── Socket.io + animation loop ───────────────────────────────── */
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas) { canvas.width = CANVAS_W; canvas.height = CANVAS_H }
-    animFrameRef.current = requestAnimationFrame(drawChart)
-
     const transports = ['polling']
     const socket = io(BACKEND, { path: SOCKET_PATH, transports })
     socketRef.current = socket
@@ -182,17 +123,38 @@ export default function EcgRealtime() {
       setServerOnline(true)
       socket.emit('check_ecg_device', { mode: connModeRef.current })
     })
-    socket.on('disconnect', () => { setServerOnline(false); setDeviceConnected(false) })
+    socket.on('disconnect', () => {
+      setServerOnline(false); setDeviceConnected(false)
+      stopScanRef.current?.()
+    })
     socket.on('device_status', (data) => {
+      if (!data.connected) stopScanRef.current?.()
       setDeviceConnected(data.connected)
       setDeviceInfo(data.connected ? data : null)
     })
-    socket.on('ecg_point', (data) => {
-      dataBufferRef.current.push(data.value)
-      setSampleCount(n => n + 1)
+    const receivePoint = (data) => {
+      if (scanStatusRef.current !== 'scanning') return
+      const channels = parseEcgSample(data)
+      if (!channels) return
+      if (recordingRef.current[0].length && channels.length !== recordingRef.current.filter(ch => ch.length).length) return
+      channels.slice(0, CHANNEL_COUNT).forEach((value, index) => {
+        recordingRef.current[index].push(value)
+      })
+      if (data.timestamp_us !== undefined) timingRef.current.push([data.timestamp_us, data.sequence, data.lost_samples])
       if (data.heart_rate) setHeartRate(data.heart_rate)
+    }
+    socket.on('ecg_point', data => { receivePoint(data); setSampleCount(recordingRef.current[0].length) })
+    socket.on('ecg_frames', data => {
+      if (scanStatusRef.current !== 'scanning') return
+      data.frames.forEach(receivePoint)
+      streamInfoRef.current = data
+      setStreamInfo(data)
+      setSampleCount(recordingRef.current[0].length)
     })
-    socket.on('ecg_analysis', (data) => { setAiResult(data); setAiStatus('done') })
+    socket.on('ecg_error', data => { setStreamError(data.error); stopScanRef.current?.() })
+    socket.on('ecg_analysis', (data) => {
+      if (scanStatusRef.current === 'scanning') { setAiResult(data); setAiStatus('done') }
+    })
 
     const onOnline  = () => setIsOnline(true)
     const onOffline = () => setIsOnline(false)
@@ -200,63 +162,91 @@ export default function EcgRealtime() {
     window.addEventListener('offline', onOffline)
 
     return () => {
-      cancelAnimationFrame(animFrameRef.current)
       clearInterval(timerRef.current)
       socket.emit('stop_ecg')
       socket.disconnect()
       window.removeEventListener('online',  onOnline)
       window.removeEventListener('offline', onOffline)
     }
-  }, [drawChart])
+  }, [])
 
   /* ─── Анализ через REST ─────────────────────────────────────────── */
-  const analyzePoints = useCallback(async (points) => {
+  const analyzePoints = useCallback(async (channels) => {
+    const window = analysisWindow(channels, timingRef.current, streamInfoRef.current?.sample_rate_hz)
+    const points = window.channels[0] ?? []
     if (!points.length) return
     setAiStatus('analyzing')
     try {
       const res  = await fetch(ANALYZE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ points }),
+        body: JSON.stringify({ points, channels: window.channels,
+          sample_rate_hz: streamInfoRef.current?.sample_rate_hz,
+          timing: window.timing,
+          missing_samples: streamInfoRef.current?.missing_samples ?? 0 }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setAiResult(data); setAiStatus('done')
-    } catch { setAiStatus('error') }
+    } catch (error) { setAiStatus('error'); setStreamError(error.message) }
   }, [])
 
   /* ─── Старт / стоп ──────────────────────────────────────────────── */
   const startScan = () => {
-    dataBufferRef.current = []
+    if (scanStatusRef.current === 'scanning') return
+    startedAtRef.current = Date.now()
+    recordingRef.current = [[], [], [], []]
+    timingRef.current = []
+    streamInfoRef.current = null
+    setStreamInfo(null)
+    setStreamError('')
+    historyId.current = null
     setSampleCount(0); setDuration(0); setHeartRate(null)
     setAiResult(null); setAiStatus('idle')
-    setSymptoms(null); setShowSymptoms(true)
+    setSymptoms(null); setShowSymptoms(false)
     setRiskData(null); setRiskLoading(false)
     setScanStatus('scanning'); scanStatusRef.current = 'scanning'
     socketRef.current?.emit('start_ecg', { mode: connModeRef.current })
-    timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
+    timerRef.current = setInterval(() => setDuration(Math.floor((Date.now() - startedAtRef.current) / 1000)), 1000)
   }
 
   const stopScan = async () => {
+    if (scanStatusRef.current !== 'scanning') return
+    const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
+    setDuration(elapsed)
     clearInterval(timerRef.current)
     socketRef.current?.emit('stop_ecg')
     setScanStatus('done'); scanStatusRef.current = 'done'
 
-    const points = [...dataBufferRef.current]
-    analyzePoints(points)
+    const channels = recordingRef.current.filter(channel => channel.length).map(channel => [...channel])
+    if (!channels.length) { setAiStatus('idle'); return }
+    setAiStatus('analyzing')
+    setShowSymptoms(true)
 
     // Save record to history immediately with points; model result will be updated via socket/analyzePoints
     historyId.current = null
-    const rec = await addToHistory({
-      type:        'live',
-      ecgPoints:   points.slice(-2000), // save last 2000 pts for waveform preview
-      connMode:    connModeRef.current,
-      duration:    undefined, // will be set below via captured value
-      sampleCount: points.length,
-      heartRate:   heartRate ?? null,
-    })
-    historyId.current = rec.id
+    try {
+      const rec = await addToHistory({
+        type:        'live',
+        ecgPoints:   channels[0],
+        ecgChannels: channels,
+        ecgTiming: [...timingRef.current],
+        sampleRateHz: streamInfoRef.current?.sample_rate_hz ?? null,
+        missingSamples: streamInfoRef.current?.missing_samples ?? 0,
+        leadLabels: (timingRef.current.length ? ['I', 'II', 'III (II - I)', 'V1'] : ['CH1', 'CH2', 'CH3', 'CH4']).slice(0, channels.length),
+        connMode:    connModeRef.current,
+        duration: elapsed,
+        sampleCount: channels[0].length,
+        heartRate:   heartRate ?? null,
+      })
+      historyId.current = rec.id
+    } catch (error) {
+      setStreamError(String(error))
+    }
+    analyzePoints(channels)
   }
+
+  stopScanRef.current = stopScan
 
   /* ─── Отправить офлайн-буфер ────────────────────────────────────── */
   const flushOffline = async () => {
@@ -267,7 +257,7 @@ export default function EcgRealtime() {
       const res  = await fetch(ANALYZE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ points: stored }),
+        body: JSON.stringify({ points: Array.isArray(stored[0]) ? stored[0] : stored, channels: Array.isArray(stored[0]) ? stored : undefined }),
       })
       const data = await res.json()
       if (!data.error) {
@@ -288,44 +278,16 @@ export default function EcgRealtime() {
     socketRef.current?.emit('check_ecg_device', { mode })
   }
 
-  const canStart = scanStatus !== 'scanning'
-  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-
+  const canStart = serverOnline && scanStatus !== 'scanning' && aiStatus !== 'analyzing'
   return (
     <div className="space-y-3">
 
-      {/* Режим подключения */}
-      <div className="border rounded-2xl p-3" style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
-        <div className="flex gap-2">
-          {CONN_MODES.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => handleModeChange(id)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer"
-              style={{
-                background: connMode === id ? 'var(--c-accent)' : 'transparent',
-                color:      connMode === id ? 'var(--c-accent-fg)' : 'var(--c-dim)',
-                border:     connMode === id ? 'none' : '1px solid var(--c-border)',
-              }}
-            >
-              <Icon size={11} />{label}
-            </button>
-          ))}
-        </div>
-        {connMode === 'wifi' && (
-          <p className="text-xs mt-2" style={{ color: 'var(--c-dim)' }}>
-            Подключись к Wi-Fi сети ESP32 (192.168.4.1).
-            {' '}<span style={{ color: '#f59e0b' }}>Интернет будет недоступен</span> — данные сохранятся офлайн.
-          </p>
-        )}
-        {connMode === 'bt' && (
-          <p className="text-xs mt-2" style={{ color: 'var(--c-dim)' }}>
-            Убедись что ESP32 сопряжён в Системных настройках → Bluetooth, затем выбери COM-порт.
-          </p>
-        )}
-      </div>
-
-      {/* Офлайн-буфер */}
+      <MonitorPanel mode={connMode} changeMode={handleModeChange} serverOnline={serverOnline}
+        deviceConnected={deviceConnected} deviceInfo={deviceInfo} status={scanStatus}
+        duration={duration} sampleCount={sampleCount} streamInfo={streamInfo} canStart={canStart}
+        start={startScan} stop={stopScan} error={streamError}>
+        <EcgScope recordingRef={recordingRef} timingRef={timingRef} status={scanStatus} mode={connMode} sampleCount={sampleCount} />
+      </MonitorPanel>
       {offlineCount > 0 && (
         <div className="border rounded-2xl p-4 flex items-center justify-between gap-3"
           style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
@@ -347,89 +309,6 @@ export default function EcgRealtime() {
         </div>
       )}
 
-      {/* Статус подключения */}
-      <div className="border rounded-2xl p-4 space-y-3" style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
-        <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('deviceStatus')}</p>
-        <div className="flex items-center gap-5 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${serverOnline ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'}`} />
-            <span className="text-xs" style={{ color: 'var(--c-muted)' }}>Flask Server</span>
-            {!serverOnline && <span className="text-xs" style={{ color: 'var(--c-dim)' }}>— {t('serverOffline')}</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <Cpu size={11} style={{ color: deviceConnected ? '#22c55e' : 'var(--c-dim)' }} />
-            <span className="text-xs" style={{ color: 'var(--c-muted)' }}>
-              {deviceConnected ? t('deviceConnected') : t('deviceNotConnected')}
-            </span>
-            {deviceInfo?.port && (
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{deviceInfo.port}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-            <span className="text-xs" style={{ color: 'var(--c-muted)' }}>
-              {isOnline ? 'Онлайн' : 'Офлайн'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Кнопки */}
-      <div className="flex gap-2">
-        <button
-          onClick={startScan}
-          disabled={!canStart}
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: 'var(--c-accent)', color: 'var(--c-accent-fg)' }}
-        >
-          {scanStatus === 'scanning' ? (
-            <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />{t('scanScanning')}</>
-          ) : (
-            <><Play size={13} /> {t('startScan')}</>
-          )}
-        </button>
-        <button
-          onClick={stopScan}
-          disabled={scanStatus !== 'scanning'}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl border text-sm font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ borderColor: 'var(--c-border)', color: 'var(--c-muted)' }}
-        >
-          <Square size={12} /> {t('stopScan')}
-        </button>
-      </div>
-
-      {/* Осциллограф */}
-      <div className="border rounded-2xl overflow-hidden" style={{ borderColor: 'var(--c-border)' }}>
-        <div className="flex items-center justify-between px-4 py-2.5 border-b flex-wrap gap-2"
-          style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${scanStatus === 'scanning' ? 'bg-emerald-500 pulse-dot' : ''}`}
-              style={scanStatus !== 'scanning' ? { background: 'var(--c-border)' } : {}}
-            />
-            <span className="text-xs" style={{ color: 'var(--c-dim)' }}>
-              {scanStatus === 'scanning' ? t('scanScanning') : scanStatus === 'done' ? t('scanDone') : t('scanIdle')}
-            </span>
-          </div>
-          {scanStatus !== 'idle' && (
-            <div className="flex items-center gap-4">
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{fmt(duration)}</span>
-              <span className="text-xs font-mono" style={{ color: 'var(--c-dim)' }}>{sampleCount} {t('samples')}</span>
-              {heartRate && <span className="text-xs font-mono" style={{ color: '#f87171' }}>♥ {heartRate} bpm</span>}
-            </div>
-          )}
-        </div>
-        <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
-        {scanStatus === 'idle' && (
-          <div className="flex items-center justify-center gap-2 py-3 border-t"
-            style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
-            <Activity size={11} style={{ color: 'var(--c-dim)' }} />
-            <p className="text-xs" style={{ color: 'var(--c-dim)' }}>{t('realtimeInfo')}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Симптомы пациента */}
       {symptoms?.readable?.length > 0 && (
         <SymptomsCard symptoms={symptoms.readable} t={t} />
       )}
@@ -442,7 +321,7 @@ export default function EcgRealtime() {
         <div className="border rounded-2xl overflow-hidden animate-fade-in"
           style={{ borderColor: 'var(--c-border)', background: 'var(--c-card)' }}>
           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--c-border)' }}>
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('result')}</p>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--c-dim)' }}>{t('result')} / {aiResult?.analysis_channel ?? 'I, II, III'}</p>
             {aiStatus === 'analyzing' && (
               <span className="text-xs flex items-center gap-2" style={{ color: 'var(--c-dim)' }}>
                 <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
@@ -464,19 +343,21 @@ export default function EcgRealtime() {
             )}
             {aiStatus === 'done' && aiResult && (
               <div className="space-y-3">
+                {aiResult.model === 'ecg_ads1293' && <p className="text-xs" style={{ color: 'var(--c-dim)' }}>{t('ecgModelScore')}</p>}
+                {aiResult.class === 'NOISE' && <p className="text-sm" style={{ color: '#f59e0b' }}>{t('ecgRepeatNoise')}</p>}
                 <div className="flex items-center justify-between px-4 py-3 rounded-xl"
                   style={{
                     background: `${CLASS_COLORS[aiResult.class] ?? '#6b7280'}18`,
                     border: `1px solid ${CLASS_COLORS[aiResult.class] ?? '#6b7280'}44`,
                   }}>
                   <span className="font-semibold text-sm" style={{ color: CLASS_COLORS[aiResult.class] ?? 'var(--c-text)' }}>
-                    {aiResult.class}
+                    {aiResult.labels?.join(', ') || aiResult.class}
                   </span>
                   <span className="text-sm font-mono font-medium" style={{ color: CLASS_COLORS[aiResult.class] ?? 'var(--c-text)' }}>
                     {(aiResult.confidence * 100).toFixed(1)}%
                   </span>
                 </div>
-                {aiResult.all && (
+                {aiResult.all && aiResult.class !== 'NOISE' && (
                   <div className="space-y-1.5">
                     {Object.entries(aiResult.all).sort(([, a], [, b]) => b - a).map(([cls, conf]) => (
                       <div key={cls} className="flex items-center gap-2">

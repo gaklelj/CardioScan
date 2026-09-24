@@ -108,7 +108,7 @@ export default function Nav({ page = 'root', title }) {
             className="text-xs border rounded-full px-3 py-1 hidden md:block"
             style={{ color: 'var(--c-dim)', borderColor: 'var(--c-border)' }}
           >
-            ecg.analyze · v5
+            ADS1293 / 3 LEADS
           </span>
         )}
 

@@ -1,3 +1,6 @@
+import { parseEcgSample } from '../services/ecgProtocol'
+import { ECG_DARK_COLORS, ECG_LIGHT_COLORS } from '../services/ecgPalette'
+import { useTheme } from '../ThemeContext'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Usb, RefreshCw, Circle, Activity, ChevronLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -11,7 +14,7 @@ const BAUD_RATES = [9600, 19200, 38400, 57600, 115200]
 const BUFFER_SIZE = 400
 const POLL_MS = 50
 
-function EcgCanvas({ data }) {
+function EcgCanvas({ data, color }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -40,9 +43,9 @@ function EcgCanvas({ data }) {
     const range = max - min || 1
 
     // Glow
-    ctx.shadowColor = 'rgba(231,76,60,0.6)'
+    ctx.shadowColor = color
     ctx.shadowBlur = 6
-    ctx.strokeStyle = '#e74c3c'
+    ctx.strokeStyle = color
     ctx.lineWidth = 1.5
     ctx.lineJoin = 'round'
     ctx.lineCap = 'round'
@@ -50,13 +53,13 @@ function EcgCanvas({ data }) {
     ctx.beginPath()
     data.forEach((v, i) => {
       const x = (i / (BUFFER_SIZE - 1)) * width
-      const y = height - ((v - min) / range) * (height * 0.8) - height * 0.1
+      const y = height - (max === min ? 0.5 : (v - min) / range) * (height * 0.8) - height * 0.1
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
     })
     ctx.stroke()
 
     ctx.shadowBlur = 0
-  }, [data])
+  }, [data, color])
 
   return (
     <canvas
@@ -98,6 +101,8 @@ function IOSNavHeader({ title }) {
 
 export default function SerialMonitor() {
   const { t } = useLanguage()
+  const { theme } = useTheme()
+  const channelColors = theme === 'light' ? ECG_LIGHT_COLORS : ECG_DARK_COLORS
   const { isIOS } = usePlatform()
   const [ports, setPorts] = useState([])
   const [selectedPort, setSelectedPort] = useState('')
@@ -105,7 +110,7 @@ export default function SerialMonitor() {
   const [connected, setConnected] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState('')
-  const [ecgBuffer, setEcgBuffer] = useState([])
+  const [ecgBuffer, setEcgBuffer] = useState([[], [], [], []])
   const [sampleCount, setSampleCount] = useState(0)
   const [rawLog, setRawLog] = useState([])
 
@@ -148,11 +153,11 @@ export default function SerialMonitor() {
         lines.forEach(line => {
           const trimmed = line.trim()
           if (!trimmed) return
-          const num = parseFloat(trimmed)
-          if (!isNaN(num)) {
+          const values = parseEcgSample(trimmed)
+          if (values) {
             setEcgBuffer(prev => {
-              const next = [...prev, num]
-              return next.length > BUFFER_SIZE ? next.slice(-BUFFER_SIZE) : next
+              return prev.map((channel, index) => index < values.length
+                ? [...channel, values[index]].slice(-BUFFER_SIZE) : [])
             })
             setSampleCount(n => n + 1)
           }
@@ -178,7 +183,7 @@ export default function SerialMonitor() {
     try {
       await invoke('connect_serial', { port: selectedPort, baudRate: baudRate })
       setConnected(true)
-      setEcgBuffer([])
+      setEcgBuffer([[], [], [], []])
       setSampleCount(0)
       setRawLog([])
       lineAccRef.current = ''
@@ -322,8 +327,13 @@ export default function SerialMonitor() {
             )}
           </div>
           <div className="p-4">
-            {ecgBuffer.length > 1
-              ? <EcgCanvas data={ecgBuffer} />
+            {ecgBuffer[0].length > 1
+              ? ecgBuffer.map((channel, index) => (
+                <div key={index}>
+                  <p style={{ color: channelColors[index] }}>CH{index + 1}{!channel.length ? ` — ${t('ecgNoData')}` : ''}</p>
+                  <EcgCanvas data={channel} color={channelColors[index]} />
+                </div>
+              ))
               : (
                 <div className="flex items-center justify-center h-[200px]"
                   style={{ color: 'var(--c-dim)', fontSize: '13px' }}>

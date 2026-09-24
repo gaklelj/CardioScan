@@ -10,6 +10,7 @@ import SerialMonitor from './pages/SerialMonitor'
 import History from './pages/History'
 import IOSTabBar from './components/IOSTabBar'
 import './index.css'
+import './studio.css'
 
 function IOSAnalyzerWrapper() {
   return <Analyzer ios />

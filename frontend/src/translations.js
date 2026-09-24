@@ -1,5 +1,14 @@
+import { monitorCopy } from './services/monitorCopy'
+
 const translations = {
   en: {
+    ecgNoData: 'No data',
+    ecgAutoScale: 'Auto scale · raw values',
+    ecgAnalysisChannel: 'AI: I, II, III',
+    ecgModelScore: 'Model score, not a disease probability',
+    ecgRepeatNoise: 'Poor signal quality. Check the electrodes and repeat the recording.',
+    ecgWifiHelp: 'Connect this computer to CardioScan-ESP32 (password: 12345678). ECG: TCP 192.168.4.1:3333. USB in this firmware sends diagnostics only.',
+    ecgLost: 'Sequence gaps / firmware queue losses',
     /* Nav */
     back: 'Back',
     guide: 'Guide',
@@ -64,7 +73,7 @@ const translations = {
     scanDone: 'Scan complete',
     analyzingEcg: 'Running AI analysis…',
     samples: 'samples',
-    realtimeInfo: 'Connect Arduino + AD8232. Press Start Scan — waveform builds live, then AI analysis runs automatically.',
+    realtimeInfo: 'Connect the ADS1293 three-channel module. Press Start Scan to view all leads live and run AI analysis.',
 
     /* Guide page */
     guideTitle: 'How to use CardioScan',
@@ -76,7 +85,7 @@ const translations = {
     bestPracticesTitle: 'Tips for better results',
     arduinoLabel: 'Arduino Setup',
     arduinoTitle: 'Using the Serial Plotter',
-    arduinoBody: "If you're using an Arduino with an AD8232 ECG sensor, open the Serial Plotter in the Arduino IDE. The live waveform can then be analyzed with CardioScan's",
+    arduinoBody: "If you're using an ESP32 with an ADS1293 ECG module, stream three comma-separated channel values from the serial port. The live waveform can then be analyzed with CardioScan's",
     arduinoBodyLiveCaptureLink: 'Live Capture',
     arduinoBodyEnd: 'mode.',
     faqLabel: 'FAQ',
@@ -105,7 +114,7 @@ const translations = {
     tip5: 'Ensure good lighting and a steady hand when photographing a printed strip.',
 
     /* Guide — arduino steps */
-    aStep1: 'Connect AD8232 module to Arduino (GND, 3.3V, OUTPUT → A0)',
+    aStep1: 'Connect the ADS1293 module to the ESP32 over SPI and stream CH1,CH2,CH3 at 250 Hz',
     aStep2: 'Upload a basic analogRead sketch',
     aStep3: 'Open Arduino IDE → Tools → Serial Plotter',
     aStep4: 'Switch to CardioScan and press Start Capture',
@@ -218,6 +227,13 @@ const translations = {
   },
 
   ru: {
+    ecgNoData: 'Нет данных',
+    ecgAutoScale: 'Автомасштаб · исходные значения',
+    ecgAnalysisChannel: 'AI: отведения I, II, III',
+    ecgModelScore: 'Оценка модели, не вероятность заболевания',
+    ecgRepeatNoise: 'Низкое качество сигнала. Проверьте электроды и повторите запись.',
+    ecgWifiHelp: 'Подключите компьютер к CardioScan-ESP32 (пароль: 12345678). ЭКГ: TCP 192.168.4.1:3333. USB в этой прошивке передаёт только диагностику.',
+    ecgLost: 'Пропуски номеров / потери очереди платы',
     back: 'Назад',
     guide: 'Гайд',
     analyze: 'Анализ',
@@ -273,7 +289,7 @@ const translations = {
     scanDone: 'Сканирование завершено',
     analyzingEcg: 'Запускаю ИИ-анализ…',
     samples: 'образцов',
-    realtimeInfo: 'Подключите Arduino + AD8232. Нажмите «Начать» — форма волны строится вживую, затем ИИ-анализ запускается автоматически.',
+    realtimeInfo: 'Подключите трёхканальный модуль ADS1293. Нажмите «Начать», чтобы видеть все отведения и запустить ИИ-анализ.',
 
     guideTitle: 'Как пользоваться CardioScan',
     guideSubtitle: 'Пошаговое руководство по захвату качественной ЭКГ и получению точных результатов.',
@@ -284,7 +300,7 @@ const translations = {
     bestPracticesTitle: 'Советы для лучших результатов',
     arduinoLabel: 'Настройка Arduino',
     arduinoTitle: 'Использование Serial Plotter',
-    arduinoBody: 'Если вы используете Arduino с датчиком ЭКГ AD8232, откройте Serial Plotter в Arduino IDE. Живую форму волны можно анализировать в режиме',
+    arduinoBody: 'Если вы используете ESP32 с модулем ЭКГ ADS1293, передавайте три значения каналов через запятую со скоростью 250 Гц. Живую форму волны можно анализировать в режиме',
     arduinoBodyLiveCaptureLink: 'Live Capture',
     arduinoBodyEnd: 'в CardioScan.',
     faqLabel: 'Частые вопросы',
@@ -310,7 +326,7 @@ const translations = {
     tip4: 'Используйте вывод Arduino Serial Plotter для наилучших результатов захвата экрана.',
     tip5: 'Обеспечьте хорошее освещение и твёрдую руку при фотографировании ленты.',
 
-    aStep1: 'Подключите модуль AD8232 к Arduino (GND, 3.3V, OUTPUT → A0)',
+    aStep1: 'Подключите ADS1293 к ESP32 по SPI и передавайте CH1,CH2,CH3 со скоростью 250 Гц',
     aStep2: 'Загрузите базовый скетч analogRead',
     aStep3: 'Откройте Arduino IDE → Инструменты → Serial Plotter',
     aStep4: 'Переключитесь на CardioScan и нажмите Start Capture',
@@ -420,6 +436,13 @@ const translations = {
   },
 
   kz: {
+    ecgNoData: 'Деректер жоқ',
+    ecgAutoScale: 'Автомасштаб · бастапқы мәндер',
+    ecgAnalysisChannel: 'AI: I, II, III тіркемелері',
+    ecgModelScore: 'Модель бағасы, ауру ықтималдығы емес',
+    ecgRepeatNoise: 'Сигнал сапасы төмен. Электродтарды тексеріп, жазбаны қайталаңыз.',
+    ecgWifiHelp: 'Компьютерді CardioScan-ESP32 желісіне қосыңыз (құпиясөз: 12345678). ЭКГ: TCP 192.168.4.1:3333. USB тек диагностика жібереді.',
+    ecgLost: 'Реттік үзілістер / тақша кезегіндегі жоғалтулар',
     back: 'Артқа',
     guide: 'Нұсқаулық',
     analyze: 'Талдау',
@@ -475,7 +498,7 @@ const translations = {
     scanDone: 'Сканерлеу аяқталды',
     analyzingEcg: 'ЖИ талдауы жүргізілуде…',
     samples: 'үлгі',
-    realtimeInfo: 'Arduino + AD8232 қосыңыз. «Бастау» түймесін басыңыз — толқын формасы тікелей тұрғызылады, содан кейін ЖИ талдауы автоматты іске қосылады.',
+    realtimeInfo: 'Үш арналы ADS1293 модулін қосыңыз. «Бастау» түймесі барлық арналарды көрсетіп, ЖИ талдауын іске қосады.',
 
     guideTitle: 'CardioScan-ды қалай пайдалану керек',
     guideSubtitle: 'Жақсы ЭКГ жазып алу және нақты нәтижелер алу бойынша қадамдық нұсқаулық.',
@@ -486,7 +509,7 @@ const translations = {
     bestPracticesTitle: 'Жақсы нәтижелер үшін кеңестер',
     arduinoLabel: 'Arduino баптауы',
     arduinoTitle: 'Serial Plotter пайдалану',
-    arduinoBody: 'Егер сіз AD8232 ЭКГ датчигімен Arduino пайдаланып жатсаңыз, Arduino IDE-де Serial Plotter-ді ашыңыз. Тікелей толқын формасын CardioScan-ның',
+    arduinoBody: 'Егер сіз ADS1293 ЭКГ модулі бар ESP32 пайдалансаңыз, үш арна мәнін үтір арқылы 250 Гц жиілікпен жіберіңіз. Тікелей толқын формасын CardioScan-ның',
     arduinoBodyLiveCaptureLink: 'Live Capture',
     arduinoBodyEnd: 'режимінде талдауға болады.',
     faqLabel: 'Жиі қойылатын сұрақтар',
@@ -512,7 +535,7 @@ const translations = {
     tip4: 'Экранды жазудың ең жақсы нәтижелері үшін Arduino Serial Plotter шығысын пайдаланыңыз.',
     tip5: 'Басып шығарылған ленталарды фотографиялау кезінде жақсы жарықтандыру мен тұрақты қолды қамтамасыз етіңіз.',
 
-    aStep1: 'AD8232 модулін Arduino-ға қосыңыз (GND, 3.3V, OUTPUT → A0)',
+    aStep1: 'ADS1293 модулін ESP32-ге SPI арқылы қосып, CH1,CH2,CH3 мәндерін 250 Гц жиілікпен жіберіңіз',
     aStep2: 'Базалық analogRead скетчін жүктеңіз',
     aStep3: 'Arduino IDE → Инструменттер → Serial Plotter-ді ашыңыз',
     aStep4: 'CardioScan-ға ауысып, Start Capture түймесін басыңыз',
@@ -620,6 +643,28 @@ const translations = {
     riskLow: 'Төмен', riskModerate: 'Орташа', riskHigh: 'Жоғары', riskCritical: 'Критикалық',
     riskPending: 'Қауіп талдауы жүргізілуде…',
   },
+}
+
+// Keep the home screen and native home aligned with the current device guide.
+for (const lang of ['ru', 'en', 'kz']) {
+  const c = monitorCopy(lang)
+  Object.assign(translations[lang], {
+    heroTitle1: c.monitor,
+    heroTitle2: 'ADS1293 + ESP32',
+    heroSubtitle: c.subtitle,
+    analyzerTitle: c.monitor,
+    analyzerSubtitle: c.subtitle,
+    startAnalyzing: c.start,
+    openAnalyzer: c.monitor,
+    realtimeInfo: c.connectHelp,
+    feat1Title: c.chart, feat1Desc: c.subtitle,
+    feat2Title: c.guide, feat2Desc: c.guideSubtitle,
+    feat3Title: c.history, feat3Desc: c.saved,
+    step1Title: c.step2, step1Body: c.step2body,
+    step2Title: c.step3, step2Body: c.step3body,
+    step3Title: c.step4, step3Body: c.step4body,
+    ctaTitle: c.ready, ctaBody: c.connectHelp,
+  })
 }
 
 export default translations

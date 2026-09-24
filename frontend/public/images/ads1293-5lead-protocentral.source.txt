@@ -1,0 +1,8 @@
+Title: ADS1293 Breakout - 5-Lead ECG Cable Connections
+Author/source: ProtoCentral
+Documentation: https://protocentral.com/product/protocentral-ads1293-breakout-board/docs/getting-started/
+Image supplied by the project owner:
+https://i0.wp.com/protocentral.com/wp-content/uploads/2026/04/ads1293-5lead-diagram.png?w=1170&ssl=1
+Downloaded unchanged for offline display in the connection guide.
+Original cable colors and CON1/CON2 labels describe ProtoCentral hardware;
+they do not establish the pinout of another board or cable.

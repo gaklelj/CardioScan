@@ -1,3 +1,4 @@
+import { ECG_DARK_COLORS } from './ecgPalette'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
@@ -37,18 +38,23 @@ function groupPreds(preds) {
   return Object.values(map).map(g => ({ ...g, avg: g.total / g.count })).sort((a, b) => b.max - a.max)
 }
 
-function miniWaveformSVG(points) {
+function miniWaveformSVG(points, channels, labels) {
   if (!points?.length) return ''
-  const pts = points.slice(-600)
-  const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 1
-  const W = 700, H = 90, pad = 8
-  const path = pts.map((v, i) => {
-    const x = (i / (pts.length - 1)) * W
-    const y = H - pad - ((v - min) / range) * (H - 2 * pad)
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:#0c0c0c;border-radius:8px">
-    <path d="${path}" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linejoin="round"/>
+  const series = channels?.length ? channels : [points]
+  const W = 700, panelHeight = 90, H = panelHeight * series.length, pad = 8
+  const paths = series.map((channel, channelIndex) => {
+    const pts = (channel ?? []).slice(-600)
+    const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 1
+    const path = pts.map((v, i) => {
+      const x = (i / Math.max(1, pts.length - 1)) * W
+      const y = channelIndex * panelHeight + panelHeight - pad - ((v - min) / range) * (panelHeight - 2 * pad)
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+    return { path, color: ECG_DARK_COLORS[channelIndex] }
+  })
+  const pathsHTML = paths.map(({ path, color }, index) => `<text x="8" y="${index * panelHeight + 14}" fill="${color}" font-size="11">${['I', 'II', 'III (II - I)', 'V1'].includes(labels?.[index]) ? labels[index] : `CH${index + 1}`}</text><path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>`).join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;background:#29171d;border-radius:8px">
+    ${pathsHTML}
   </svg>`
 }
 
@@ -120,7 +126,7 @@ function buildHTML(record, lang) {
   const waveHTML = record.type === 'live' && record.ecgPoints?.length ? `
     <div class="section">
       <div class="section-title">Сигнал ЭКГ</div>
-      ${miniWaveformSVG(record.ecgPoints)}
+      ${miniWaveformSVG(record.ecgPoints, record.ecgChannels, record.leadLabels)}
     </div>` : ''
 
   const summaryHTML = record.aiSummary ? `

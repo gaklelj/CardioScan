@@ -1,3 +1,4 @@
+import { ECG_DARK_COLORS } from '../services/ecgPalette'
 import { useEffect, useState } from 'react'
 import { Clock, Trash2, FileDown, Activity, Upload, Wifi, Usb, Bluetooth, AlertTriangle, X } from 'lucide-react'
 import Nav from '../components/Nav'
@@ -117,7 +118,7 @@ function ExpandedRecord({ record, onClose, lang }) {
           {record.type === 'live' && record.ecgPoints?.length > 0 && (
             <div>
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-dim)' }}>Сигнал ЭКГ</p>
-              <MiniWaveform points={record.ecgPoints} />
+              <MiniWaveform points={record.ecgPoints} channels={record.ecgChannels} labels={record.leadLabels} />
             </div>
           )}
 
@@ -233,19 +234,28 @@ function Stat({ label, value }) {
   )
 }
 
-function MiniWaveform({ points }) {
-  const pts = points.slice(-500)
-  const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 1
-  const W = 600, H = 80, pad = 8
-  const path = pts.map((v, i) => {
-    const x = (i / (pts.length - 1)) * W
-    const y = H - pad - ((v - min) / range) * (H - 2 * pad)
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+function MiniWaveform({ points, channels, labels }) {
+  const series = channels?.length ? channels : [points]
+  const W = 600, panelHeight = 80, H = panelHeight * series.length, pad = 8
+  const paths = series.map((channel, channelIndex) => {
+    const pts = (channel ?? []).slice(-500)
+    const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 1
+    const path = pts.map((v, i) => {
+      const x = (i / Math.max(1, pts.length - 1)) * W
+      const y = channelIndex * panelHeight + panelHeight - pad - ((v - min) / range) * (panelHeight - 2 * pad)
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+    return { path, color: ECG_DARK_COLORS[channelIndex] }
+  })
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#0c0c0c', border: '1px solid var(--c-border)' }}>
+    <div className="rounded-xl overflow-hidden" style={{ background: '#29171d', border: '1px solid var(--c-border)' }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-        <path d={path} fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinejoin="round" />
+        {paths.map(({ path, color }, index) => (
+          <g key={index}>
+            <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+            <text x="8" y={index * panelHeight + 14} fill={color} fontSize="11">{labels?.[index] ?? `CH${index + 1}`}</text>
+          </g>
+        ))}
       </svg>
     </div>
   )
@@ -425,8 +435,8 @@ export default function History() {
 
               {/* Mini waveform strip for live records */}
               {record.type === 'live' && record.ecgPoints?.length > 0 && (
-                <div className="mt-3 rounded-xl overflow-hidden" style={{ background: '#0c0c0c', border: '1px solid var(--c-border)' }}>
-                  <MiniWaveform points={record.ecgPoints} />
+                <div className="mt-3 rounded-xl overflow-hidden" style={{ background: '#29171d', border: '1px solid var(--c-border)' }}>
+                  <MiniWaveform points={record.ecgPoints} channels={record.ecgChannels} labels={record.leadLabels} />
                 </div>
               )}
             </div>
